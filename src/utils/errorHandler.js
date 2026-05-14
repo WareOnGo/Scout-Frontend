@@ -33,6 +33,16 @@ export const parseError = (error) => {
         errorInfo.issues = data.issues || [];
         break;
 
+      case 401:
+        errorInfo.type = ERROR_TYPES.GENERIC;
+        errorInfo.message = data.message || 'Unauthorized — check your Employee ID';
+        break;
+
+      case 403:
+        errorInfo.type = ERROR_TYPES.GENERIC;
+        errorInfo.message = data.message || 'Access forbidden — your scout access may have been revoked';
+        break;
+
       case 404:
         errorInfo.type = ERROR_TYPES.NOT_FOUND;
         errorInfo.message = 'Warehouse not found';

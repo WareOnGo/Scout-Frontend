@@ -275,6 +275,16 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
   const [currentStep, setCurrentStep] = useState(0);
   const [draftRestored, setDraftRestored] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [submitReady, setSubmitReady] = useState(false);
+
+  // Anti-double-click protection for submit button
+  useEffect(() => {
+    if (currentStep === formSteps.length - 1) {
+      setSubmitReady(false);
+      const t = setTimeout(() => setSubmitReady(true), 500);
+      return () => clearTimeout(t);
+    }
+  }, [currentStep]);
 
   // Reset form when modal opens
   const [initialSnapshot, setInitialSnapshot] = useState(null);
@@ -361,7 +371,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     return true;
   };
 
-  const handleNext = () => {
+  const handleNext = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (validateStep(currentStep)) {
       setCurrentStep(prev => prev + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -630,8 +641,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(
                 col(
-                  <Field label="Uploaded By" required error={errors.uploadedBy} tooltip="Mention your name.">
-                    <TextInput mobile={m} value={values.uploadedBy} onChange={set('uploadedBy')} placeholder="Uploader name" data-field="uploadedBy" />
+                  <Field label="Employee ID" required error={errors.uploadedBy} tooltip="Enter your Employee ID (empid) — this is used to authenticate your scout session.">
+                    <TextInput mobile={m} value={values.uploadedBy} onChange={set('uploadedBy')} placeholder="e.g. SCOUT001" data-field="uploadedBy" />
                   </Field>,
                   true)
               )}
@@ -1011,16 +1022,18 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                 Previous
               </button>
             )}
-            {currentStep < formSteps.length - 1 ? (
-              <button type="button" className="form-btn form-btn--primary" onClick={handleNext}>
+            {currentStep < formSteps.length - 1 && (
+              <button key="next-btn" type="button" className="form-btn form-btn--primary" onClick={handleNext}>
                 Next
               </button>
-            ) : (
+            )}
+            {currentStep === formSteps.length - 1 && (
               <button
+                key="submit-btn"
                 type="submit"
                 className="form-btn form-btn--primary"
-                disabled={loading || submitting || mediaUploading}
-                title={mediaUploading ? 'Waiting for media uploads to finish' : undefined}
+                disabled={loading || submitting || mediaUploading || !submitReady}
+                title={mediaUploading ? 'Waiting for media uploads to finish' : !submitReady ? 'Wait a moment...' : undefined}
               >
                 {submitting
                   ? (m ? 'Saving...' : 'Saving')
