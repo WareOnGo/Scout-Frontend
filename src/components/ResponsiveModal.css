@@ -1,0 +1,230 @@
+/* ResponsiveModal Component Styles */
+
+.responsive-modal {
+  z-index: var(--z-modal, 1000);
+}
+
+.responsive-modal__close {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 2px solid var(--border-primary);
+  border-radius: var(--radius-brutal, 6px);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-brutal-sm, 3px 3px 0 0 var(--border-primary));
+  flex-shrink: 0;
+}
+
+.responsive-modal__close:hover {
+  background: var(--bg-page);
+}
+
+/* Smooth animations for modal appearance */
+.responsive-modal {
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+.responsive-modal > div {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile-specific animations */
+@media (max-width: 767px) {
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(100px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Ensure proper touch scrolling on mobile */
+.responsive-modal [style*="overflow: auto"] {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Focus styles for accessibility */
+.responsive-modal:focus-within {
+  outline: none;
+}
+
+.responsive-modal [tabindex="-1"]:focus {
+  outline: none !important;
+}
+
+.responsive-modal [tabindex="-1"] {
+  outline: none !important;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .responsive-modal {
+    background: rgba(0, 0, 0, 0.75);
+  }
+  
+  .responsive-modal > div {
+    border: 2px solid var(--text-primary, #0a0a0a);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .responsive-modal,
+  .responsive-modal > div {
+    animation: none;
+  }
+}
+
+/* Safe area handling for devices with notches */
+@supports (padding: env(safe-area-inset-top)) {
+  .responsive-modal {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Ensure modal content doesn't get cut off on very small screens */
+@media (max-height: 500px) and (max-width: 767px) {
+  .responsive-modal {
+    align-items: flex-start;
+  }
+  
+  .responsive-modal > div {
+    min-height: 100vh;
+    border-radius: 0;
+  }
+}
+
+/* Landscape mobile optimization */
+@media (max-width: 767px) and (orientation: landscape) {
+  .responsive-modal {
+    padding: 8px;
+  }
+  
+  .responsive-modal > div {
+    border-radius: 8px;
+    min-height: auto;
+    max-height: calc(100vh - 16px);
+  }
+}
+
+/* Tablet-specific optimizations */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .responsive-modal {
+    padding: 16px;
+  }
+}
+
+/* Desktop optimizations */
+@media (min-width: 1024px) {
+  .responsive-modal {
+    padding: 20px;
+  }
+}
+
+/* Print styles - hide modals when printing */
+@media print {
+  .responsive-modal {
+    display: none !important;
+  }
+}
+
+/* Warehouse Details Modal Specific Styles */
+.warehouse-details-modal .ant-image-preview-mask {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.warehouse-details-modal .ant-image-preview-operations {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 12px;
+}
+
+.warehouse-details-modal .toolbar-wrapper {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+/* Enhanced image preview for mobile */
+@media (max-width: 767px) {
+  .warehouse-details-modal .ant-image-preview-operations {
+    padding: 16px;
+  }
+  
+  .warehouse-details-modal .toolbar-wrapper {
+    padding: 12px 20px;
+  }
+  
+  .warehouse-details-modal .ant-image-preview-operations .ant-btn {
+    min-height: 44px;
+    min-width: 44px;
+    margin: 0 4px;
+  }
+}
+
+/* Collapsible sections styling for mobile */
+.warehouse-details-modal .ant-collapse-ghost > .ant-collapse-item {
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.warehouse-details-modal .ant-collapse-ghost > .ant-collapse-item:last-child {
+  border-bottom: none;
+}
+
+.warehouse-details-modal .ant-collapse-header {
+  padding: 16px 0 !important;
+}
+
+.warehouse-details-modal .ant-collapse-content-box {
+  padding: 0 0 16px 0 !important;
+}
+
+/* Image grid responsive behavior */
+.warehouse-details-modal .ant-image {
+  transition: transform 0.2s ease;
+}
+
+.warehouse-details-modal .ant-image:hover {
+  transform: scale(1.02);
+}
+
+@media (max-width: 767px) {
+  .warehouse-details-modal .ant-image:active {
+    transform: scale(0.98);
+  }
+}

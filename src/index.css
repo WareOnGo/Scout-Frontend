@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  /* wareongo.com palette */
+  --bg-page: #F8F6F1;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8F6F1;
+  --text-primary: #1F2D3D;
+  --text-secondary: #5A6B7B;
+  --border-primary: #E5DFD2;
+  --border-strong: #1F2D3D;
+  --accent-primary: #0a2239;
+  --accent-primary-hover: #143456;
+  --required-color: #B0431E;
+  --error-color: #B0431E;
+  --radius-brutal: 8px;
+  --shadow-brutal: 0 4px 12px rgba(10, 34, 57, 0.08);
+  --shadow-brutal-sm: 0 1px 3px rgba(10, 34, 57, 0.06);
+  --focus-ring: 0 0 0 3px rgba(10, 34, 57, 0.15);
+  --font-sans: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* App shell */
+.app-shell {
+  min-height: 100vh;
+  padding: clamp(12px, 3vw, 24px);
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+
+.app-shell__header {
+  max-width: 1100px;
+  margin: 0 auto 16px;
+}
+
+.app-shell__title {
+  margin: 0;
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent-primary);
+}
+
+.app-shell__main {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Toasts */
+.toast-stack {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-brutal);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-brutal);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast--success {
+  border-color: var(--border-primary);
+}
+
+.toast--error {
+  border-color: var(--required-color);
+}
+
+.toast--out {
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+
+  .toast--out {
+    transition: none;
+  }
+}
