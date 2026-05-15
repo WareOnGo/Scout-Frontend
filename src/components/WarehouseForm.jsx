@@ -28,7 +28,7 @@ const INITIAL_VALUES = {
   compliances: '', otherSpecifications: '',
   fireNocAvailable: false,
   fireSafetyMeasures: '', landType: '', approachRoadWidth: '',
-  powerKva: '', pollutionZone: '', vaastuCompliance: false,
+  powerKva: '', pollutionZone: '', vaastuCompliance: '',
   parkingDockingSpace: '', photos: '', media: null,
   // Newly added fields
   listing_type: '',
@@ -485,7 +485,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         gateSizeFt: values.gateSizeFt || null,
         dockApronLengthFt: values.dockApronLengthFt || null,
         setbackArea: values.setbackArea || null,
-        ccRoads: values.ccRoads || null,
+        ccRoads: typeof values.ccRoads === 'boolean'
+          ? (values.ccRoads ? 'true' : 'false')
+          : (values.ccRoads || null),
         wallAndSecurityRoom: values.wallAndSecurityRoom || null,
         plinthHeightFt: values.plinthHeightFt || null,
         dockDimension: values.dockDimension || null,
@@ -495,7 +497,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         flooringType: values.flooringType || null,
         floorStrengthPerSqm: values.floorStrengthPerSqm || null,
         ventilationType: values.ventilationType || null,
-        insulationPresent: values.insulationPresent || null,
+        insulationPresent: typeof values.insulationPresent === 'boolean'
+          ? (values.insulationPresent ? 'true' : 'false')
+          : (values.insulationPresent || null),
         insulationType: values.insulationType || null,
         lightingDetails: values.lightingDetails || null,
         centreHeight: values.centreHeight || null,
@@ -507,7 +511,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
           parkingDockingSpace: values.parkingDockingSpace || null,
           pollutionZone: values.pollutionZone || null,
           powerKva: values.powerKva ? String(values.powerKva) : null,
-          vaastuCompliance: values.vaastuCompliance ? 'true' : null,
+          vaastuCompliance: typeof values.vaastuCompliance === 'boolean'
+            ? (values.vaastuCompliance ? 'true' : 'false')
+            : (values.vaastuCompliance || null),
         },
       };
 
