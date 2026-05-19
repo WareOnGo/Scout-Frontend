@@ -713,7 +713,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               {row(
                 col(
                   <Field label="Employee ID" required error={errors.uploadedBy} tooltip="Enter your Employee ID (empid) — this is used to authenticate your scout session.">
-                    <TextInput mobile={m} value={values.uploadedBy} onChange={set('uploadedBy')} placeholder="e.g. SCOUT001" data-field="uploadedBy" />
+                    <TextInput mobile={m} value={values.uploadedBy} onChange={set('uploadedBy')} placeholder="e.g. VBHIWH" data-field="uploadedBy" />
                   </Field>,
                   true)
               )}
