@@ -13,7 +13,7 @@ const POLLUTION_ZONES = ['Green', 'Yellow', 'Red'];
 const formSteps = [
   { title: 'Owner Details', fields: ['listing_type', 'contactPerson', 'contactNumber', 'uploadedBy'] },
   { title: 'Location Details', fields: ['address', 'city', 'state', 'zone'] },
-  { title: 'Technical Specs', fields: ['warehouseType', 'totalSpaceSqft'] },
+  { title: 'Technical Specs', fields: ['warehouseType', 'totalSpaceSqft', 'chargeableArea'] },
   { title: 'Compliances', fields: ['compliances'] },
   { title: 'Commercials', fields: ['ratePerSqft'] },
   { title: 'Media', fields: [] },
@@ -44,6 +44,7 @@ const INITIAL_VALUES = {
   flooringType: '', floorStrengthPerSqm: '', ventilationType: '',
   insulationPresent: '', insulationType: '',
   lightingDetails: '', centreHeight: '',
+  cam: '', chargeableArea: '',
 };
 
 /** Flatten initialData (including nested WarehouseData) into form shape */
@@ -116,6 +117,8 @@ const toFormValues = (d) => {
     insulationType: d.insulationType || '',
     lightingDetails: d.lightingDetails || '',
     centreHeight: d.centreHeight || '',
+    cam: d.cam || '',
+    chargeableArea: d.chargeableArea ?? '',
   };
 };
 
@@ -392,6 +395,13 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     if (fields.includes('uploadedBy') && !values.uploadedBy?.trim()) e.uploadedBy = 'Uploaded by is required';
     if (fields.includes('compliances') && !values.compliances) e.compliances = 'Compliance info is required';
 
+    if (fields.includes('chargeableArea') && values.chargeableArea !== '' && values.chargeableArea != null) {
+      const n = Number(values.chargeableArea);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+        e.chargeableArea = 'Chargeable area must be a non-negative whole number';
+      }
+    }
+
     return e;
   };
 
@@ -527,6 +537,10 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         insulationType: values.insulationType || null,
         lightingDetails: values.lightingDetails || null,
         centreHeight: values.centreHeight || null,
+        cam: values.cam || null,
+        chargeableArea: values.chargeableArea === '' || values.chargeableArea == null
+          ? null
+          : Number(values.chargeableArea),
         warehouseData: {
           fireNocAvailable: Boolean(values.fireNocAvailable),
           fireSafetyMeasures: values.fireSafetyMeasures || null,
@@ -850,13 +864,18 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   true)}
               </>)}
 
-              {row(
-                col(
+              {row(<>
+                {col(
                   <Field label="Carpet Area" tooltip="Please mention the entire carpet area.">
                     <TextInput mobile={m} value={values.carpet_area} onChange={set('carpet_area')} placeholder="Carpet area" />
                   </Field>,
-                  true)
-              )}
+                  true)}
+                {col(
+                  <Field label="Chargeable Area (sq ft)" error={errors.chargeableArea} tooltip="The billable area used to compute rent.">
+                    <TextInput mobile={m} value={values.chargeableArea} onChange={set('chargeableArea')} placeholder="Chargeable area" type="number" inputMode="numeric" data-field="chargeableArea" />
+                  </Field>,
+                  true)}
+              </>)}
 
               {row(<>
                 {col(
@@ -1056,6 +1075,14 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                 col(
                   <Field label="Rate per sq ft" required error={errors.ratePerSqft}>
                     <TextInput mobile={m} value={values.ratePerSqft} onChange={set('ratePerSqft')} placeholder="Rate per sq ft" data-field="ratePerSqft" />
+                  </Field>,
+                  true)
+              )}
+
+              {row(
+                col(
+                  <Field label="CAM" tooltip="Common Area Maintenance charges.">
+                    <TextInput mobile={m} value={values.cam} onChange={set('cam')} placeholder="CAM charges" />
                   </Field>,
                   true)
               )}
