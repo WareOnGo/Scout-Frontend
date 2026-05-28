@@ -10,6 +10,9 @@ import { getMediaFromWarehouse } from '../utils/mediaUtils';
 const ZONES = ['North', 'South', 'East', 'West', 'Central'];
 const LAND_TYPES = ['Warehouse CLU', 'Commercial CLU', 'Industrial CLU', 'Others'];
 const POLLUTION_ZONES = ['Green', 'Yellow', 'Red'];
+const OWNER_TYPES = ['Individual', 'Company', '3PL', 'Multiple owners'];
+const OWNER_WARMTH_OPTIONS = ['Green', 'Yellow', 'Red'];
+const WAREHOUSE_TYPES = ['PEB', 'RCC', 'Shed', 'BTS'];
 const formSteps = [
   { title: 'Owner Details', fields: ['listing_type', 'contactPerson', 'contactNumber', 'uploadedBy'] },
   { title: 'Location Details', fields: ['address', 'city', 'state', 'zone'] },
@@ -212,17 +215,24 @@ const TextAreaInput = ({ value, onChange, mobile: _m, placeholder, rows = 3 }) =
   />
 );
 
-const SelectInput = ({ value, onChange, mobile: _m, placeholder, options, ...rest }) => (
-  <select
-    className="form-input"
-    value={value ?? ''}
-    onChange={e => onChange(e.target.value)}
-    {...rest}
-  >
-    <option value="" disabled>{placeholder}</option>
-    {options.map(o => <option key={o} value={o}>{o}</option>)}
-  </select>
-);
+const SelectInput = ({ value, onChange, mobile: _m, placeholder, options, ...rest }) => {
+  // Preserve free-text values that don't match a predefined option, so an
+  // existing entry is shown (and not silently overwritten) in edit mode while
+  // the dropdown still lets the user switch to a standard option.
+  const hasCustomValue = value != null && value !== '' && !options.includes(value);
+  return (
+    <select
+      className="form-input"
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value)}
+      {...rest}
+    >
+      <option value="" disabled>{placeholder}</option>
+      {hasCustomValue && <option value={value}>{value} (current)</option>}
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+};
 
 const ToggleSwitch = ({ checked, onChange, yesLabel = 'Yes', noLabel = 'No' }) => (
   <div className="form-toggle-split" role="group" aria-label="Toggle">
@@ -659,7 +669,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   true)}
                 {col(
                   <Field label="Warehouse Owner Type">
-                    <TextInput mobile={m} value={values.warehouseOwnerType} onChange={set('warehouseOwnerType')} placeholder="Individual/Company/3PL" data-field="warehouseOwnerType" />
+                    <SelectInput mobile={m} value={values.warehouseOwnerType} onChange={set('warehouseOwnerType')} placeholder="Select owner type" options={OWNER_TYPES} data-field="warehouseOwnerType" />
                   </Field>,
                   true)}
               </>)}
@@ -714,12 +724,12 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               {row(<>
                 {col(
                   <Field label="Owner Warmth" tooltip="Rate the owner's personality. Green = positive and collaborative; Yellow = neutral; Red = hard to deal with.">
-                    <TextInput mobile={m} value={values.owner_warmnth} onChange={set('owner_warmnth')} placeholder="Green/Yellow/Red" />
+                    <SelectInput mobile={m} value={values.owner_warmnth} onChange={set('owner_warmnth')} placeholder="Select owner warmth" options={OWNER_WARMTH_OPTIONS} />
                   </Field>,
                   true)}
                 {col(
                   <Field label="Owner of Multiple Sites">
-                    <TextInput mobile={m} value={values.owner_of_multiple_sites} onChange={set('owner_of_multiple_sites')} placeholder="Yes / No / details" />
+                    <SelectInput mobile={m} value={values.owner_of_multiple_sites} onChange={set('owner_of_multiple_sites')} placeholder="Select Yes / No" options={['Yes', 'No']} />
                   </Field>,
                   true)}
               </>)}
@@ -813,7 +823,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               {row(<>
                 {col(
                   <Field label="Warehouse Type" required error={errors.warehouseType} tooltip="Please mention PEB / RCC / Shed. Use 'Shed' for old-style godowns.">
-                    <TextInput mobile={m} value={values.warehouseType} onChange={set('warehouseType')} placeholder="PEB/RCC/Shed" data-field="warehouseType" />
+                    <SelectInput mobile={m} value={values.warehouseType} onChange={set('warehouseType')} placeholder="Select warehouse type" options={WAREHOUSE_TYPES} data-field="warehouseType" />
                   </Field>,
                   true)}
                 {col(
