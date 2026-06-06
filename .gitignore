@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Ad-hoc locality/warehouse data sheets & analysis scripts (do not commit)
+*.xlsx
+locality_warehouse_within_2km.csv
+fetch_warehouse_coords.js
+match_localities_2km.js
