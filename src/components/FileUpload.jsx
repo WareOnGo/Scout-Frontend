@@ -160,6 +160,11 @@ const FileUpload = ({ value, onChange, onUploadingChange, uploadedBy, disabled =
       .then((url) => {
         const current = normalizeMedia(valueRef.current);
         const next = { ...current, [category]: [...current[category], url] };
+        // Update the ref synchronously so concurrent uploads completing in the
+        // same burst accumulate instead of clobbering each other. Relying on the
+        // useEffect to refresh valueRef lags behind a burst of onChange calls,
+        // which dropped files when several uploads finished together (Android).
+        valueRef.current = next;
         if (onChange) onChange(next);
         showSuccessMessage('upload');
       })
