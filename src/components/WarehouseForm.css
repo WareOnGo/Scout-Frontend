@@ -327,6 +327,15 @@ textarea.form-input {
   min-height: 88px;
 }
 
+/* Scout Notes — large free-text area that scales with the viewport */
+.scout-notes-area textarea.form-input {
+  min-height: clamp(200px, 35vh, 420px);
+}
+
+.warehouse-form-modal.is-mobile .scout-notes-area textarea.form-input {
+  min-height: clamp(180px, 30vh, 360px);
+}
+
 .form-input::placeholder {
   color: #6b6b6b;
 }

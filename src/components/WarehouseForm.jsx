@@ -62,6 +62,7 @@ const formSteps = [
   { title: 'Compliances', fields: ['compliances'] },
   { title: 'Commercials', fields: ['ratePerSqft'] },
   { title: 'Media', fields: [] },
+  { title: 'Scout Notes', fields: [] },
 ];
 
 const INITIAL_VALUES = {
@@ -90,6 +91,7 @@ const INITIAL_VALUES = {
   insulationPresent: '', insulationType: '',
   lightingDetails: '', centreHeight: '',
   cam: '', chargeableArea: '',
+  scoutNotes: '',
 };
 
 /** Flatten initialData (including nested WarehouseData) into form shape */
@@ -163,6 +165,7 @@ const toFormValues = (d) => {
     centreHeight: d.centreHeight || '',
     cam: d.cam || '',
     chargeableArea: d.chargeableArea ?? '',
+    scoutNotes: d.scoutNotes || '',
   };
 };
 
@@ -698,6 +701,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         chargeableArea: values.chargeableArea === '' || values.chargeableArea == null
           ? null
           : Number(values.chargeableArea),
+        scoutNotes: values.scoutNotes?.trim() || null,
         warehouseData: {
           fireNocAvailable: Boolean(values.fireNocAvailable),
           fireSafetyMeasures: values.fireSafetyMeasures || null,
@@ -1258,6 +1262,23 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
             <Section title="Media">
               <Field label="Upload Files, Layout, Images and Videos">
                 <FileUpload value={values.media} onChange={set('media')} onUploadingChange={setMediaUploading} uploadedBy={values.uploadedBy} />
+              </Field>
+            </Section>
+          </div>
+
+          {/* ── Scout Notes ──────────────────────────────────── */}
+          <div className={currentStep === 6 ? '' : 'step-hidden'}>
+            <Section title="Scout Notes">
+              <Field label="Notes">
+                <div className="scout-notes-area">
+                  <TextAreaInput
+                    mobile={m}
+                    value={values.scoutNotes}
+                    onChange={set('scoutNotes')}
+                    placeholder="Extra notes from the visit — field observations, client suitability, or anything else worth mentioning."
+                    rows={m ? 10 : 8}
+                  />
+                </div>
               </Field>
             </Section>
           </div>
