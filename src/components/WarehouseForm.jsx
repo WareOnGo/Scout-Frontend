@@ -5,6 +5,7 @@ import { clearErrors } from '../utils/errorHandler';
 import { useViewport } from '../hooks/useViewport';
 import { getMediaFromWarehouse } from '../utils/mediaUtils';
 import { looksLikePhone } from '../utils/phone';
+import { WATER_SUPPLY_OPTIONS, waterSupplyToEnum, waterSupplyToLabel } from '../utils/waterSupply';
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ const INITIAL_VALUES = {
   flooringType: '', floorStrengthPerSqm: '', ventilationType: '',
   insulationPresent: '', insulationType: '',
   lightingDetails: '', centreHeight: '',
-  hasBorewell: false,
+  waterSupply: '',
   // RCC-only fields (rendered only when warehouseType is 'RCC')
   totalFloors: '', liftAccess: false, passengerLiftCount: '',
   serviceLiftCount: '', liftLoadCapacity: '',
@@ -166,7 +167,7 @@ const toFormValues = (d) => {
     insulationPresent: d.insulationPresent || '',
     insulationType: d.insulationType || '',
     lightingDetails: d.lightingDetails || '',
-    hasBorewell: d.hasBorewell === true || d.hasBorewell === 'true',
+    waterSupply: waterSupplyToLabel(d.waterSupply),
     centreHeight: d.centreHeight || '',
     // RCC-only fields
     totalFloors: d.totalFloors || '',
@@ -707,7 +708,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
           : (values.insulationPresent || null),
         insulationType: values.insulationType || null,
         lightingDetails: values.lightingDetails || null,
-        hasBorewell: typeof values.hasBorewell === 'boolean' ? values.hasBorewell : null,
+        waterSupply: waterSupplyToEnum(values.waterSupply),
         centreHeight: values.centreHeight || null,
         // RCC-only fields. Sent regardless of the current warehouseType so that
         // switching type away from RCC hides the inputs without wiping the data.
@@ -1222,8 +1223,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(
                 col(
-                  <Field label="Borewell" tooltip="Is there a borewell on the site?">
-                    <ToggleSwitch checked={values.hasBorewell} onChange={set('hasBorewell')} />
+                  <Field label="Water Supply" tooltip="How is water supplied to the site?">
+                    <SelectInput mobile={m} value={values.waterSupply} onChange={set('waterSupply')} placeholder="Select water supply" options={WATER_SUPPLY_OPTIONS} />
                   </Field>,
                   true)
               )}
