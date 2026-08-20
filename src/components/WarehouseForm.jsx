@@ -6,6 +6,7 @@ import { useViewport } from '../hooks/useViewport';
 import { getMediaFromWarehouse } from '../utils/mediaUtils';
 import { looksLikePhone } from '../utils/phone';
 import { WATER_SUPPLY_OPTIONS, waterSupplyToEnum, waterSupplyToLabel } from '../utils/waterSupply';
+import { SUITABLE_FOR_OPTIONS } from '../utils/suitableFor';
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -97,6 +98,8 @@ const INITIAL_VALUES = {
   serviceLiftCount: '', liftLoadCapacity: '',
   cam: '', chargeableArea: '',
   scoutNotes: '',
+  // Array, not a string: sent to the API exactly as held here.
+  suitableFor: [],
 };
 
 /** Flatten initialData (including nested WarehouseData) into form shape */
@@ -178,6 +181,7 @@ const toFormValues = (d) => {
     cam: d.cam || '',
     chargeableArea: d.chargeableArea ?? '',
     scoutNotes: d.scoutNotes || '',
+    suitableFor: Array.isArray(d.suitableFor) ? d.suitableFor : [],
   };
 };
 
@@ -406,6 +410,50 @@ const ToggleSwitch = ({ checked, onChange, yesLabel = 'Yes', noLabel = 'No' }) =
     </button>
   </div>
 );
+
+/**
+ * Tap-to-select tags.
+ *
+ * Every option is on screen and each is its own tap target, which suits a form
+ * filled on a phone at a site far better than a dropdown. Rendered as real
+ * buttons with aria-pressed so it is operable by keyboard and announced
+ * correctly, rather than styled divs.
+ *
+ * @param {string[]} value - selected codes
+ * @param {(next: string[]) => void} onChange
+ * @param {{value: string, label: string}[]} options
+ */
+const TagSelect = ({ value, onChange, options }) => {
+  const selected = Array.isArray(value) ? value : [];
+  const toggle = (v) => onChange(
+    selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v],
+  );
+
+  return (
+    <>
+      <div className="form-tags" role="group" aria-label="Suitable for">
+        {options.map((o) => {
+          const on = selected.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={on}
+              className={`form-tags__btn${on ? ' is-active' : ''}`}
+              onClick={() => toggle(o.value)}
+            >
+              {on && <span className="form-tags__tick" aria-hidden="true">✓</span>}
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="form-tags__hint">
+        {selected.length ? `${selected.length} selected` : 'Tap all that apply. Optional.'}
+      </p>
+    </>
+  );
+};
 
 const Section = ({ title, children }) => (
   <section>
@@ -722,6 +770,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
           ? null
           : Number(values.chargeableArea),
         scoutNotes: values.scoutNotes?.trim() || null,
+        // Always an array: the column defaults to [] and the API reads an
+        // empty array as "no tags" rather than as unset.
+        suitableFor: Array.isArray(values.suitableFor) ? values.suitableFor : [],
         warehouseData: {
           fireNocAvailable: Boolean(values.fireNocAvailable),
           fireSafetyMeasures: values.fireSafetyMeasures || null,
@@ -1337,6 +1388,16 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
           {/* ── Scout Notes ──────────────────────────────────── */}
           <div className={currentStep === 6 ? '' : 'step-hidden'}>
             <Section title="Scout Notes">
+              {/* Above the notes box: it is a quick tap-through, whereas the
+                  notes field invites a pause to write, and anything placed
+                  after it tends to be missed. */}
+              <Field label="Suitable For">
+                <TagSelect
+                  value={values.suitableFor}
+                  onChange={set('suitableFor')}
+                  options={SUITABLE_FOR_OPTIONS}
+                />
+              </Field>
               <Field label="Notes">
                 <div className="scout-notes-area">
                   <TextAreaInput
@@ -1357,7 +1418,14 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               Media is still uploading — submit will be enabled once it completes.
             </div>
           )}
-          <div className={m ? 'form-actions form-actions--stack' : 'form-actions'}>
+          {/* --no-prev is set explicitly rather than relying on :has(), so the
+              grid collapses to a single full-width Next on the first step in
+              every browser rather than leaving an empty cell. */}
+          <div className={
+            m
+              ? `form-actions form-actions--stack${currentStep > 0 ? '' : ' form-actions--no-prev'}`
+              : 'form-actions'
+          }>
             <button type="button" className="form-btn form-btn--ghost form-btn--cancel" onClick={handleCancel}>
               Cancel
             </button>

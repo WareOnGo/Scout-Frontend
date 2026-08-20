@@ -33,6 +33,28 @@
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
 }
 
+/*
+ * Height of the fixed action bar: two button rows plus gap and padding.
+ * Declared once so the spacer below it can never drift out of step with the
+ * bar's real size — that mismatch is what leaves the last field unreachable.
+ */
+.warehouse-form-modal.is-mobile {
+  --form-actions-h: 118px;
+}
+
+/*
+ * Room for the last field to clear the fixed bar.
+ *
+ * The bar is out of flow, so it contributes no height and would otherwise sit
+ * permanently on top of whatever the form ends with. scroll-padding-bottom
+ * additionally stops a focused input being scrolled to a position underneath
+ * it when the keyboard opens.
+ */
+.warehouse-form-modal.is-mobile .warehouse-form-inner {
+  padding-bottom: calc(var(--form-actions-h) + env(safe-area-inset-bottom, 0px) + 16px);
+  scroll-padding-bottom: calc(var(--form-actions-h) + 24px);
+}
+
 /* Step indicator */
 .form-steps-wrap {
   margin-bottom: 24px;
@@ -407,6 +429,63 @@ textarea.form-input {
   background: var(--bg-secondary);
 }
 
+/* Tap-to-select tags (Suitable For)
+ *
+ * Chips rather than a dropdown: this form is filled on a phone at a site, and a
+ * multi-select dropdown on mobile means a scroll list with tiny checkboxes. Each
+ * chip is its own 44px tap target, all options are visible at once, and picking
+ * several needs no modifier keys.
+ */
+.form-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-tags__btn {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-brutal);
+  background: var(--bg-page);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  cursor: pointer;
+  /* Selection is conveyed by colour AND a leading tick, so it does not rely on
+     colour alone. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-tags__btn.is-active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.form-tags__btn:hover:not(.is-active) {
+  background: var(--bg-secondary);
+}
+
+.form-tags__btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.form-tags__tick {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.form-tags__hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 /* Inline row (space list) */
 .form-inline-row {
   display: flex;
@@ -447,16 +526,62 @@ textarea.form-input {
   justify-content: flex-end;
 }
 
+/*
+ * Mobile action bar.
+ *
+ * FIXED, not sticky. position:sticky pins to whichever ancestor is actually
+ * scrolling, and this modal has two candidates — the overlay (overflowY:auto)
+ * and the body (overflow:auto) — with the content forced to minHeight:100vh, so
+ * which one scrolls depends on how tall the step happens to be. On a long step
+ * the bar therefore stopped pinning and simply scrolled up with the content.
+ * The modal is full-screen on mobile, so pinning to the viewport is the same
+ * position without depending on any of that.
+ *
+ * Laid out as a grid rather than a column of full-width buttons: three stacked
+ * 48px buttons plus padding took roughly a third of a phone screen. Previous
+ * and Next share a row, Cancel sits under them at reduced weight.
+ *
+ * The background is OPAQUE. It was a gradient fading to transparent, so the
+ * field underneath showed through the top of the bar and read as a rendering
+ * glitch — a half-visible label overlapping a button.
+ */
 .form-actions--stack {
-  flex-direction: column;
-  position: sticky;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    'prev next'
+    'cancel cancel';
+  gap: 10px;
+  position: fixed;
+  left: 0;
+  right: 0;
   bottom: 0;
-  z-index: 8;
-  padding: 16px 0 max(16px, env(safe-area-inset-bottom, 0px));
-  margin-top: 24px;
+  z-index: 20;
+  padding: 12px clamp(10px, 3vw, 20px) max(12px, env(safe-area-inset-bottom, 0px));
+  margin-top: 0;
   border-top: 2px solid var(--border-primary);
-  background: linear-gradient(to top, var(--bg-page) 70%, transparent);
+  background: var(--bg-page);
   transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+/* Soft fade so content scrolling under the bar does not end in a hard edge. */
+.form-actions--stack::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 20px;
+  background: linear-gradient(to top, var(--bg-page), transparent);
+  pointer-events: none;
+}
+
+/* First step has no Previous, so Next takes the full width rather than leaving
+   a hole in the grid. */
+.form-actions--stack.form-actions--no-prev {
+  grid-template-areas:
+    'next next'
+    'cancel cancel';
 }
 
 /* Hide the sticky mobile action bar while the virtual keyboard is actually
@@ -526,18 +651,26 @@ textarea.form-input {
 
 .form-actions--stack .form-btn {
   width: 100%;
+  margin: 0;
 }
 
+/* Grid areas replace the previous `order` values — with two columns, source
+   order alone cannot express "these two side by side, that one below". */
 .form-actions--stack .form-btn--primary {
-  order: 1;
+  grid-area: next;
 }
 
 .form-actions--stack .form-btn--prev {
-  order: 3;
+  grid-area: prev;
 }
 
+/* Cancel is the rare, destructive action: kept reachable but visually quiet and
+   shorter, so it does not compete with Next for a thumb. */
 .form-actions--stack .form-btn--cancel {
-  order: 4;
+  grid-area: cancel;
+  min-height: 40px;
+  font-size: 14px;
+  opacity: 0.75;
 }
 
 @media (min-width: 768px) {
