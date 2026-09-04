@@ -228,6 +228,15 @@ body {
   word-break: break-all;
 }
 
+/* A staging reference is a uuid, not a short number — shrink it and set it in mono so
+   it stays readable and transcribable at the card's width. */
+.success-page__id-value--reference {
+  font-size: clamp(0.8125rem, 3vw, 0.9375rem);
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+}
+
 .success-page__cta {
   width: 100%;
 }

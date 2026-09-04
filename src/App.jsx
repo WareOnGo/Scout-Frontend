@@ -38,7 +38,8 @@ function App() {
       <main className="app-shell__main">
         {createdWarehouse ? (
           <SuccessPage
-            warehouseId={createdWarehouse.id}
+            warehouseId={createdWarehouse.warehouseId}
+            submissionId={createdWarehouse.submissionId ?? createdWarehouse.id}
             onStartOver={handleStartOver}
           />
         ) : (
