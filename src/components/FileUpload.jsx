@@ -64,6 +64,19 @@ const getFileName = (url) => {
 const EMPTY_MEDIA = { images: [], videos: [], docs: [] };
 
 /**
+ * How many files may be in flight at once.
+ *
+ * Every upload first asks the API for its own presigned URL, and that request
+ * verifies the scout against the database. Picking a whole shoot at once used
+ * to fire one such request per file simultaneously, which exhausted the
+ * database connection pool and failed the batch with a 500. Uploading in small
+ * waves keeps a large submission within what the API can serve, and costs
+ * almost nothing in wall-clock time on a phone connection where a handful of
+ * parallel uploads already saturate the uplink.
+ */
+const MAX_CONCURRENT_UPLOADS = 4;
+
+/**
  * FileUpload — images, videos, documents (native input + custom CSS).
  */
 const normalizeMedia = (v) =>
@@ -137,26 +150,17 @@ const FileUpload = ({ value, onChange, onUploadingChange, uploadedBy, disabled =
     return imageUrl;
   };
 
-  const processFile = (file) => {
-    const category = classifyFile(file);
-    if (!category) {
-      showErrorMessage({ type: 'validation', message: `"${file.name}": Unsupported file type. Allowed: images, videos, PDFs, and Office documents.` });
-      return;
-    }
+  // Files waiting for a free slot, and how many are in flight. Both live in
+  // refs so that files added while an earlier batch is still uploading join
+  // the same pool instead of starting a second one that ignores the cap.
+  const queueRef = useRef([]);
+  const activeCountRef = useRef(0);
+  const pumpRef = useRef(() => {});
 
-    if (file.size / 1024 / 1024 >= maxSize) {
-      showErrorMessage({ type: 'validation', message: `"${file.name}": File must be smaller than ${maxSize}MB!` });
-      return;
-    }
+  const runUpload = ({ file, uploadId, category }) => {
+    updateUpload(uploadId, { queued: false });
 
-    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setActiveUploads(prev => {
-      const next = new Map(prev);
-      next.set(uploadId, { name: file.name, progress: 0 });
-      return next;
-    });
-
-    uploadFile(file, uploadId)
+    return uploadFile(file, uploadId)
       .then((url) => {
         const current = normalizeMedia(valueRef.current);
         const next = { ...current, [category]: [...current[category], url] };
@@ -177,6 +181,49 @@ const FileUpload = ({ value, onChange, onUploadingChange, uploadedBy, disabled =
       });
   };
 
+  const pump = () => {
+    while (activeCountRef.current < MAX_CONCURRENT_UPLOADS && queueRef.current.length > 0) {
+      const job = queueRef.current.shift();
+      activeCountRef.current += 1;
+      runUpload(job).finally(() => {
+        activeCountRef.current -= 1;
+        // Start the next file through the current render's closure, so it sees
+        // an up-to-date onChange rather than the one captured when this upload
+        // began.
+        pumpRef.current();
+      });
+    }
+  };
+
+  useEffect(() => {
+    pumpRef.current = pump;
+  });
+
+  const processFile = (file) => {
+    const category = classifyFile(file);
+    if (!category) {
+      showErrorMessage({ type: 'validation', message: `"${file.name}": Unsupported file type. Allowed: images, videos, PDFs, and Office documents.` });
+      return;
+    }
+
+    if (file.size / 1024 / 1024 >= maxSize) {
+      showErrorMessage({ type: 'validation', message: `"${file.name}": File must be smaller than ${maxSize}MB!` });
+      return;
+    }
+
+    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Register every accepted file up front, queued ones included, so the list
+    // reflects the whole selection and `uploading` stays true until the last
+    // file lands — the form must not submit while files are still waiting.
+    setActiveUploads(prev => {
+      const next = new Map(prev);
+      next.set(uploadId, { name: file.name, progress: 0, queued: true });
+      return next;
+    });
+
+    queueRef.current.push({ file, uploadId, category });
+  };
+
   const onInputChange = (e) => {
     const { files } = e.target;
     if (!files?.length) return;
@@ -184,6 +231,7 @@ const FileUpload = ({ value, onChange, onUploadingChange, uploadedBy, disabled =
       processFile(files[i]);
     }
     e.target.value = '';
+    pump();
   };
 
   const handleRemove = (category, urlToRemove) => {
@@ -260,9 +308,11 @@ const FileUpload = ({ value, onChange, onUploadingChange, uploadedBy, disabled =
 
       {activeUploads.size > 0 && (
         <div style={{ marginBottom: 12 }}>
-          {[...activeUploads.entries()].map(([id, { name, progress }]) => (
+          {[...activeUploads.entries()].map(([id, { name, progress, queued }]) => (
             <div key={id} className="file-upload__progress">
-              <span className="file-upload__progress-label">{name}</span>
+              <span className="file-upload__progress-label">
+                {name}{queued ? ' — waiting' : ''}
+              </span>
               <div className="file-upload__progress-track">
                 <div className="file-upload__progress-bar" style={{ width: `${progress}%` }} />
               </div>

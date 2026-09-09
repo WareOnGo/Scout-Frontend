@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -210,5 +211,62 @@ describe('FileUpload', () => {
     const next = onChange.mock.calls.at(-1)[0];
     expect(next.images).toHaveLength(0);
     expect(next.docs).toEqual(['https://r2/doc.pdf']);
+  });
+
+  it('FU-10: caps files in flight at 4 so a large selection cannot exhaust the API', async () => {
+    render(<FileUpload value={null} onChange={vi.fn()} uploadedBy="VBHIWH" />);
+    const files = Array.from({ length: 12 }, (_, i) => makeFile(`p${i}.jpg`, 'image/jpeg', 1024));
+
+    await selectFiles(files);
+
+    // Every accepted file is listed immediately, the waiting ones marked as such.
+    await waitFor(() => expect(screen.getAllByText(/waiting$/)).toHaveLength(8));
+
+    // Only the first wave has asked for a presigned URL.
+    await waitFor(() => expect(warehouseService.getPresignedUrl).toHaveBeenCalledTimes(4));
+    expect(FakeXHR.instances).toHaveLength(4);
+
+    // Completing one upload admits exactly one more.
+    act(() => {
+      FakeXHR.instances[0].status = 200;
+      FakeXHR.instances[0].fire('load');
+    });
+    await waitFor(() => expect(warehouseService.getPresignedUrl).toHaveBeenCalledTimes(5));
+    expect(FakeXHR.instances).toHaveLength(5);
+  });
+
+  it('FU-11: a 30-image submission uploads all 30 and keeps every url', async () => {
+    const onChange = vi.fn();
+    let n = 0;
+    warehouseService.getPresignedUrl.mockImplementation(async () => {
+      n += 1;
+      return { uploadUrl: `https://r2/u${n}`, imageUrl: `https://r2/i${n}` };
+    });
+
+    const Harness = () => {
+      const [media, setMedia] = React.useState(null);
+      onChange.mockImplementation(setMedia);
+      return <FileUpload value={media} onChange={onChange} uploadedBy="VBHIWH" />;
+    };
+    render(<Harness />);
+
+    const files = Array.from({ length: 30 }, (_, i) => makeFile(`p${i}.jpg`, 'image/jpeg', 1024));
+    await selectFiles(files);
+
+    // Finish uploads as they are admitted until the queue is empty.
+    let completed = 0;
+    while (completed < 30) {
+      await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(completed));
+      const xhr = FakeXHR.instances[completed];
+      await act(async () => {
+        xhr.status = 200;
+        xhr.fire('load');
+      });
+      completed += 1;
+    }
+
+    await waitFor(() => expect(screen.getByText(/Images \(30\)/)).toBeInTheDocument());
+    const finalMedia = onChange.mock.calls.at(-1)[0];
+    expect(new Set(finalMedia.images).size).toBe(30);
   });
 });
