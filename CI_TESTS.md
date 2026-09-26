@@ -182,9 +182,9 @@ Build a fully-populated form, submit, and capture the argument passed to `onSubm
 
 | ID | Expected payload assertion |
 |---|---|
-| PAY-1 | Top-level keys present: `warehouseOwnerType`, `warehouseType`, `address`, `googleLocation`, `city`, `state`, `postalCode`, `zone`, `contactPerson`, `contactNumber`, `totalSpaceSqft`, `offeredSpaceSqft`, `numberOfDocks`, `clearHeightFt`, `compliances`, `otherSpecifications`, `ratePerSqft`, `availability`, `uploadedBy`, `isBroker`, `photos`, `media`, plus all newly-added fields, and a `warehouseData` object. |
+| PAY-1 | Top-level keys present: `warehouseOwnerType`, `warehouseType`, `address`, `googleLocation`, `city`, `state`, `postalCode`, `zone`, `contactPerson`, `contactNumber`, `totalSpaceSqft`, `numberOfDocks`, `clearHeightFt`, `compliances`, `otherSpecifications`, `ratePerSqft`, `availability`, `uploadedBy`, `isBroker`, `photos`, `media`, plus all newly-added fields, and a `warehouseData` object. |
 | PAY-2 | `totalSpaceSqft` filtered: only entries `v != null && v > 0` are sent. |
-| PAY-3 | Numeric fields sent as strings: `offeredSpaceSqft`, `numberOfDocks`, `clearHeightFt`, `ratePerSqft`, `approachRoadWidth`, `powerKva` → `String(v)` if truthy, else `null`. |
+| PAY-3 | Numeric fields sent as strings: `numberOfDocks`, `clearHeightFt`, `ratePerSqft`, `approachRoadWidth`, `powerKva` → `String(v)` if truthy, else `null`. |
 | PAY-4 | `chargeableArea` sent as `Number` (not string) or `null`. |
 | PAY-5 | `media` is `null` when no images/videos/docs uploaded; the object `{ images, videos, docs }` otherwise. |
 | PAY-6 | `photos` is the legacy CSV string of all media URLs (images+videos+docs), or `null` if empty. |

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // Block real network from FileUpload's service calls in case the user ever
@@ -214,6 +214,25 @@ describe('WarehouseForm — SelectInput (current) preservation', () => {
 });
 
 describe('WarehouseForm — submit guard', () => {
+  it('submits edited area options without the stale legacy field', async () => {
+    const onSubmit = vi.fn().mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<WarehouseForm visible={true} onSubmit={onSubmit} onCancel={vi.fn()} initialData={{
+      listing_type: 'Rent', warehouseType: 'PEB', address: 'Test warehouse',
+      city: 'Bangalore', state: 'Karnataka', contactPerson: 'Test Owner',
+      contactNumber: '9999999999', uploadedBy: 'TEST', compliances: 'CLU', ratePerSqft: '25',
+      totalSpaceSqft: [10000, 5000], offeredSpaceSqft: '99999',
+    }} />);
+    fireEvent.change(document.querySelector('[data-field="totalSpaceSqft"]'), { target: { value: '15000' } });
+    for (let step = 0; step < 6; step++) await user.click(screen.getByRole('button', { name: /^next$/i }));
+    const submit = screen.getByRole('button', { name: /Update Warehouse/i });
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].totalSpaceSqft).toEqual([15000, 5000]);
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('offeredSpaceSqft');
+  });
+
   it('PAY-11: pressing Enter on Step 0 does NOT call onSubmit', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
