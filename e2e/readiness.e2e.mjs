@@ -125,7 +125,7 @@ for (const width of [320, 390, 1280]) {
       await field(page, 'availability').scrollIntoViewIfNeeded();
       await page.screenshot({ path: test.info().outputPath(`readiness-${width}.png`), fullPage: true });
       const receipt = await submit(page);
-      await verifyStored(request, receipt, { ...values, handoverType: 'FIXED', handoverLeadValue: null, handoverLeadUnit: 'MONTHS' });
+      await verifyStored(request, receipt, { ...values, handoverType: 'FIXED', handoverLeadValue: null, handoverLeadUnit: null });
     });
   });
 }
@@ -167,7 +167,7 @@ test('a changed availability and cleared construction status stay cleared after 
 test('an older draft with all new optional fields absent still submits', async ({ page, request }) => {
   await restore(page);
   await verifyStored(request, await submit(page), { availabilityLastReviewedOn: null, status: null,
-    handoverType: 'FIXED', handoverDate: null, handoverLeadValue: null, handoverLeadUnit: 'MONTHS', lockInDate: null });
+    handoverType: 'FIXED', handoverDate: null, handoverLeadValue: null, handoverLeadUnit: null, lockInDate: null });
 });
 
 test('invalid lead times and review dates are blocked before any submission request', async ({ page }) => {

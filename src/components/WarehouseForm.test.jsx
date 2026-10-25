@@ -256,7 +256,7 @@ describe('WarehouseForm — availability and readiness', () => {
     expect(await submitForm(user, onSubmit, /Update Warehouse/i)).toMatchObject({
       availability: 'Yes', availabilityLastReviewedOn: '2026-10-02',
       handoverType: 'FIXED', handoverDate: '2027-02-15', handoverLeadValue: null,
-      handoverLeadUnit: 'MONTHS', lockInDate: '2027-02-01', status: 'Ready to move',
+      handoverLeadUnit: null, lockInDate: '2027-02-01', status: 'Ready to move',
     });
   });
 
@@ -306,6 +306,31 @@ describe('WarehouseForm — availability and readiness', () => {
     expect(field('handoverType')).toHaveValue('Variable');
     expect(field('handoverLeadValue')).toHaveValue(10);
     expect(field('handoverLeadUnit')).toHaveValue('Days');
+  });
+
+  it('preserves a missing unit when an unrelated field is edited', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} initialData={{
+      ...validValues, handoverType: 'VARIABLE', handoverLeadValue: 2, handoverLeadUnit: null,
+    }} />);
+    await user.click(screen.getByRole('button', { name: 'Go to Commercials' }));
+    expect(field('handoverLeadUnit')).toHaveValue('');
+    fireEvent.change(field('ratePerSqft'), { target: { value: '26' } });
+    expect(await submitForm(user, onSubmit, /Update Warehouse/i)).toMatchObject({
+      ratePerSqft: '26', handoverType: 'VARIABLE', handoverLeadValue: 2, handoverLeadUnit: null,
+    });
+  });
+
+  it('starts a new variable handover without an assumed unit and keeps it saveable', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    restoreDraft({ handoverType: 'Variable', handoverLeadValue: '2' });
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(field('handoverLeadUnit')).toHaveValue('');
+    expect(await submitForm(user, onSubmit)).toMatchObject({
+      handoverType: 'VARIABLE', handoverLeadValue: 2, handoverLeadUnit: null,
+    });
   });
 
   it.each(['0', '-1', '1.5', '121'])('blocks invalid lead time %s before leaving Commercials', async value => {
@@ -449,7 +474,7 @@ describe('WarehouseForm — availability and readiness', () => {
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
     expect(await submitForm(user, onSubmit)).toMatchObject({
       availabilityLastReviewedOn: null, handoverType: 'FIXED', handoverDate: null,
-      handoverLeadValue: null, handoverLeadUnit: 'MONTHS', lockInDate: null, status: null,
+      handoverLeadValue: null, handoverLeadUnit: null, lockInDate: null, status: null,
     });
   });
 

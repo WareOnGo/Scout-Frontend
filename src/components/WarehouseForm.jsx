@@ -87,7 +87,7 @@ const INITIAL_VALUES = {
   totalSpaceSqft: [1000], ratePerSqft: '', numberOfDocks: '',
   clearHeightFt: '', availability: '', isBroker: '', uploadedBy: '',
   availabilityLastReviewedOn: '', status: '', lockInDate: '',
-  handoverType: 'Fixed', handoverDate: '', handoverLeadValue: '', handoverLeadUnit: 'Months',
+  handoverType: 'Fixed', handoverDate: '', handoverLeadValue: '', handoverLeadUnit: '',
   compliances: '', otherSpecifications: '',
   fireNocAvailable: false,
   fireSafetyMeasures: '', landType: '', approachRoadWidth: '',
@@ -144,7 +144,7 @@ const toFormValues = (d) => {
     handoverType: d.handoverType === 'VARIABLE' ? 'Variable' : 'Fixed',
     handoverDate: dateInputValue(d.handoverDate),
     handoverLeadValue: d.handoverLeadValue ?? '',
-    handoverLeadUnit: HANDOVER_UNIT_OPTIONS.find(unit => unit.toUpperCase() === d.handoverLeadUnit) || 'Months',
+    handoverLeadUnit: HANDOVER_UNIT_OPTIONS.find(unit => unit.toUpperCase() === d.handoverLeadUnit) || '',
     isBroker: d.isBroker || '',
     uploadedBy: d.uploadedBy || '',
     compliances: d.compliances || '',
@@ -1492,9 +1492,14 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               {row(<>
                 {col(
                   <Field label="Handover Type" htmlFor={readinessId + '-handover-type'} error={errors.handoverType}
-                    tooltip="Choose Fixed for a known handover date, or Variable for a lead time from today.">
+                    tooltip="Fixed: a handover date. Variable: time needed after the letter of intent is signed.">
                     <SelectInput id={readinessId + '-handover-type'} value={values.handoverType} onChange={set('handoverType')}
                       options={HANDOVER_TYPE_OPTIONS} placeholder="Select handover type" data-field="handoverType" />
+                    <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {values.handoverType === 'Variable'
+                        ? 'Enter the time needed after the letter of intent is signed.'
+                        : 'Enter the date the warehouse can be handed over.'}
+                    </p>
                   </Field>,
                   true)}
                 {values.handoverType !== 'Variable' && col(
