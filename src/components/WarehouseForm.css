@@ -284,6 +284,8 @@
 }
 
 .form-help__tip {
+  /* Hidden tooltips must not enlarge the mobile layout viewport. */
+  display: none;
   position: absolute;
   left: 50%;
   bottom: calc(100% + 8px);
@@ -305,6 +307,7 @@
 
 .form-help:hover .form-help__tip,
 .form-help:focus .form-help__tip {
+  display: block;
   opacity: 1;
   visibility: visible;
 }

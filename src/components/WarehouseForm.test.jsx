@@ -213,6 +213,260 @@ describe('WarehouseForm — SelectInput (current) preservation', () => {
   });
 });
 
+describe('WarehouseForm — availability and readiness', () => {
+  const validValues = {
+    listing_type: 'Rent', warehouseType: 'PEB', address: 'Test warehouse',
+    city: 'Bangalore', state: 'Karnataka', contactPerson: 'Test Owner',
+    contactNumber: '9999999999', uploadedBy: 'TEST', compliances: 'CLU', ratePerSqft: '25',
+    totalSpaceSqft: [10000], availability: 'Yes',
+  };
+  const field = name => document.querySelector(`[data-field="${name}"]`);
+  const restoreDraft = (values = {}, currentStep = 4) => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      values: { ...validValues, ...values }, currentStep, savedAt: Date.now(),
+    }));
+  };
+  const submitForm = async (user, onSubmit, buttonName = /Create Warehouse/i) => {
+    await user.click(screen.getByRole('button', { name: 'Go to Scout Notes' }));
+    const button = screen.getByRole('button', { name: buttonName });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    return onSubmit.mock.calls[0][0];
+  };
+
+  it('prefills date-only fields from API timestamps and submits fixed handover and construction status', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} initialData={{
+      ...validValues, availabilityLastReviewedOn: '2026-10-01T00:00:00.000Z',
+      handoverType: 'FIXED', handoverDate: '2027-01-15T00:00:00.000Z',
+      lockInDate: '2027-01-01T00:00:00.000Z', status: 'Under construction',
+    }} />);
+    await user.click(screen.getByRole('button', { name: 'Go to Commercials' }));
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-01');
+    expect(field('handoverDate')).toHaveValue('2027-01-15');
+    expect(field('lockInDate')).toHaveValue('2027-01-01');
+    expect(field('status')).toHaveValue('Under construction');
+    fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-10-02' } });
+    fireEvent.change(field('handoverDate'), { target: { value: '2027-02-15' } });
+    fireEvent.change(field('lockInDate'), { target: { value: '2027-02-01' } });
+    await user.selectOptions(field('status'), 'Ready to move');
+
+    expect(await submitForm(user, onSubmit, /Update Warehouse/i)).toMatchObject({
+      availability: 'Yes', availabilityLastReviewedOn: '2026-10-02',
+      handoverType: 'FIXED', handoverDate: '2027-02-15', handoverLeadValue: null,
+      handoverLeadUnit: 'MONTHS', lockInDate: '2027-02-01', status: 'Ready to move',
+    });
+  });
+
+  it('preserves both handover modes, saves them in drafts and submits numeric lead time with API enums', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    restoreDraft();
+    const { unmount } = render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-10-01' } });
+    fireEvent.change(field('handoverDate'), { target: { value: '2027-01-15' } });
+    fireEvent.change(field('lockInDate'), { target: { value: '2027-01-01' } });
+    await user.selectOptions(field('status'), 'Build to suit');
+    await user.selectOptions(field('handoverType'), 'Variable');
+    expect(field('handoverDate')).toBeNull();
+    fireEvent.change(field('handoverLeadValue'), { target: { value: '3' } });
+    await user.selectOptions(field('handoverLeadUnit'), 'Weeks');
+    const expectedDraft = {
+      availabilityLastReviewedOn: '2026-10-01', handoverDate: '2027-01-15',
+      handoverType: 'Variable', handoverLeadValue: '3', handoverLeadUnit: 'Weeks',
+      lockInDate: '2027-01-01', status: 'Build to suit',
+    };
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(DRAFT_KEY)).values).toMatchObject(expectedDraft));
+    unmount();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(field('handoverType')).toHaveValue('Variable');
+    expect(field('handoverLeadValue')).toHaveValue(3);
+    expect(field('handoverLeadUnit')).toHaveValue('Weeks');
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-01');
+    expect(field('lockInDate')).toHaveValue('2027-01-01');
+    expect(field('status')).toHaveValue('Build to suit');
+    await user.selectOptions(field('handoverType'), 'Fixed');
+    expect(field('handoverDate')).toHaveValue('2027-01-15');
+    expect(field('handoverLeadValue')).toBeNull();
+    await user.selectOptions(field('handoverType'), 'Variable');
+    expect(field('handoverLeadValue')).toHaveValue(3);
+    expect(field('handoverLeadUnit')).toHaveValue('Weeks');
+
+    expect(await submitForm(user, onSubmit)).toMatchObject({
+      ...expectedDraft, handoverType: 'VARIABLE', handoverLeadValue: 3, handoverLeadUnit: 'WEEKS',
+    });
+  });
+
+  it('prefills variable handover from API enums', async () => {
+    await act(async () => { render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} initialData={{
+      ...validValues, handoverType: 'VARIABLE', handoverLeadValue: 10, handoverLeadUnit: 'DAYS',
+    }} />); });
+    expect(field('handoverType')).toHaveValue('Variable');
+    expect(field('handoverLeadValue')).toHaveValue(10);
+    expect(field('handoverLeadUnit')).toHaveValue('Days');
+  });
+
+  it.each(['0', '-1', '1.5', '121'])('blocks invalid lead time %s before leaving Commercials', async value => {
+    const user = userEvent.setup();
+    restoreDraft({ handoverType: 'Variable', handoverLeadValue: value });
+    render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByText('Lead time must be a whole number between 1 and 120')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Media', exact: true })).toBeDisabled();
+    fireEvent.change(field('handoverLeadValue'), { target: { value: '120' } });
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+  });
+
+  it('requires availability when a review date is supplied', async () => {
+    const user = userEvent.setup();
+    restoreDraft({ availability: '', availabilityLastReviewedOn: '2026-10-01' });
+    render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByText('Enter availability before recording a review date')).toBeInTheDocument();
+  });
+
+  it('clears a restored review date when availability changes and submits the cleared date', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.change(field('availability'), { target: { value: 'No' } });
+    expect(field('availabilityLastReviewedOn')).toHaveValue('');
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(DRAFT_KEY)).values).toMatchObject({
+      availability: 'No', availabilityLastReviewedOn: '',
+    }));
+    expect(await submitForm(user, onSubmit)).toMatchObject({ availability: 'No', availabilityLastReviewedOn: null });
+  });
+
+  it.each(['yes', ' Yes ', 'YES'])('keeps the review date for an equivalent availability value %s', async availability => {
+    restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
+    await act(async () => { render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />); });
+    fireEvent.change(field('availability'), { target: { value: availability } });
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-01');
+  });
+
+  it('allows clearing construction status, restores that choice and keeps a newly selected review date', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
+    const { unmount } = render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.change(field('availability'), { target: { value: 'No' } });
+    fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-10-02' } });
+    await user.selectOptions(field('status'), 'Ready to move');
+    await user.selectOptions(field('status'), '');
+    expect(field('status')).toHaveValue('');
+    expect(within(field('status')).getByRole('option', { name: 'Not recorded' })).toBeEnabled();
+    expect(field('listing_type').querySelector('option[value=""]')).toBeDisabled();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(DRAFT_KEY)).values).toMatchObject({
+      availability: 'No', availabilityLastReviewedOn: '2026-10-02', status: '',
+    }));
+    unmount();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(field('status')).toHaveValue('');
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-02');
+    expect(await submitForm(user, onSubmit)).toMatchObject({
+      availability: 'No', availabilityLastReviewedOn: '2026-10-02', status: null,
+    });
+  });
+
+  it('resets partial native review-date input and its error when availability changes', async () => {
+    const user = userEvent.setup();
+    restoreDraft();
+    render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    const previousInput = field('availabilityLastReviewedOn');
+    vi.spyOn(previousInput, 'validity', 'get').mockReturnValue({ badInput: true });
+    fireEvent.keyUp(previousInput, { key: '0' });
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByText('Enter a complete, valid date')).toBeInTheDocument();
+    fireEvent.change(field('availability'), { target: { value: 'No' } });
+    expect(field('availabilityLastReviewedOn')).not.toBe(previousInput);
+    expect(field('availabilityLastReviewedOn')).toHaveValue('');
+    expect(screen.queryByText('Enter a complete, valid date')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+  });
+
+  it.each(['availabilityLastReviewedOn', 'handoverDate', 'lockInDate', 'handoverLeadValue'])(
+    'blocks partial native input in %s even when the browser reports an empty value', async key => {
+      const user = userEvent.setup();
+      restoreDraft({ handoverType: key === 'handoverLeadValue' ? 'Variable' : 'Fixed' });
+      render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+      const input = field(key);
+      // jsdom doesn't model the date editor's segments or invalid numeric text.
+      // Real browsers return value="" with badInput=true for these partial entries.
+      const validity = vi.spyOn(input, 'validity', 'get').mockReturnValue({ badInput: true });
+      if (key === 'handoverLeadValue') fireEvent.input(input);
+      else fireEvent.keyUp(input, { key: '0' });
+      await user.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByRole('button', { name: 'Media', exact: true })).toBeDisabled();
+
+      validity.mockReturnValue({ badInput: false });
+      fireEvent.input(input, { target: { value: key === 'handoverLeadValue' ? '2' : '2026-10-01' } });
+      await user.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+    },
+  );
+
+  it.each(['availabilityLastReviewedOn', 'handoverDate', 'lockInDate'])(
+    'rejects an impossible calendar date restored into %s', async key => {
+      const user = userEvent.setup();
+      restoreDraft({ [key]: '2025-02-30' });
+      render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+      await user.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(screen.getByText('Enter a complete, valid date')).toBeInTheDocument();
+      expect(field(key)).toHaveAttribute('aria-invalid', 'true');
+      fireEvent.change(field(key), { target: { value: '2024-02-29' } });
+      await user.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+    },
+  );
+
+  it('limits review dates to today in India when UTC is still on the previous date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-24T20:00:00.000Z'));
+    try {
+      restoreDraft({ availabilityLastReviewedOn: '2026-10-26' });
+      await act(async () => { render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />); });
+      expect(field('availabilityLastReviewedOn')).toHaveAttribute('max', '2026-10-25');
+      fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(screen.getByText('Review date cannot be in the future')).toBeInTheDocument();
+      fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-10-25' } });
+      fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
+      expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps readiness optional for existing drafts without the new fields', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({});
+    restoreDraft();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(await submitForm(user, onSubmit)).toMatchObject({
+      availabilityLastReviewedOn: null, handoverType: 'FIXED', handoverDate: null,
+      handoverLeadValue: null, handoverLeadUnit: 'MONTHS', lockInDate: null, status: null,
+    });
+  });
+
+  it.each(['Variable', 'Fixed'])('rechecks an invalid final-step draft with %s handover before submitting', async handoverType => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    restoreDraft({ handoverType, handoverLeadValue: '121' }, 6);
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    const button = screen.getByRole('button', { name: /Create Warehouse/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/whole number between 1 and 120/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^next$/i })).toBeInTheDocument();
+  });
+});
+
 describe('WarehouseForm — submit guard', () => {
   it('submits edited area options without the stale legacy field', async () => {
     const onSubmit = vi.fn().mockResolvedValue({});

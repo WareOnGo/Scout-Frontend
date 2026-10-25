@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import FileUpload from './FileUpload';
 import './WarehouseForm.css';
 import { clearErrors } from '../utils/errorHandler';
@@ -15,6 +15,19 @@ const POLLUTION_ZONES = ['Green', 'Yellow', 'Red'];
 const OWNER_TYPES = ['Individual', 'Company', '3PL'];
 const OWNER_WARMTH_OPTIONS = ['Green', 'Yellow', 'Red'];
 const WAREHOUSE_TYPES = ['PEB', 'RCC', 'Shed', 'BTS'];
+const STATUS_OPTIONS = ['Under construction', 'Build to suit', 'Ready to move'];
+const HANDOVER_TYPE_OPTIONS = ['Fixed', 'Variable'];
+const HANDOVER_UNIT_OPTIONS = ['Days', 'Weeks', 'Months'];
+const normalizeAvailability = value => (value || '').trim().toLowerCase();
+const dateInputValue = value => value ? String(value).slice(0, 10) : '';
+const isCalendarDate = value => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
+const todayInIndia = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date());
 
 const INDIA_STATE_CITIES = {
   'Andhra Pradesh': ['Alluri Sitharama Raju', 'Anakapalli', 'Anantapur', 'Ananthapuramu', 'Annamayya', 'Bapatla', 'Bhimavaram', 'Chittoor', 'Dr. B. R. Ambedkar Konaseema', 'East Godavari', 'Eluru', 'Guntur', 'Hindupur', 'Kadapa', 'Kakinada', 'Krishna', 'Kurnool', 'Machilipatnam', 'Markapuram', 'Nandyal', 'Nellore', 'NTR', 'Ongole', 'Palnadu', 'Parvathipuram Manyam', 'Polavaram', 'Prakasam', 'Rajahmundry', 'Sri Potti Sriramulu Nellore', 'Sri Sathya Sai', 'Srikakulam', 'Tenali', 'Tirupati', 'Vijayawada', 'Visakhapatnam', 'Vizianagaram', 'West Godavari', 'YSR Kadapa'],
@@ -62,7 +75,7 @@ const formSteps = [
   { title: 'Location Details', fields: ['address', 'city', 'state'] },
   { title: 'Technical Specs', fields: ['warehouseType', 'totalSpaceSqft', 'chargeableArea'] },
   { title: 'Compliances', fields: ['compliances'] },
-  { title: 'Commercials', fields: ['ratePerSqft'] },
+  { title: 'Commercials', fields: ['ratePerSqft', 'availabilityLastReviewedOn', 'handoverType', 'handoverDate', 'handoverLeadValue', 'lockInDate'] },
   { title: 'Media', fields: [] },
   { title: 'Scout Notes', fields: [] },
 ];
@@ -73,6 +86,8 @@ const INITIAL_VALUES = {
   contactPerson: '', contactNumber: '',
   totalSpaceSqft: [1000], ratePerSqft: '', numberOfDocks: '',
   clearHeightFt: '', availability: '', isBroker: '', uploadedBy: '',
+  availabilityLastReviewedOn: '', status: '', lockInDate: '',
+  handoverType: 'Fixed', handoverDate: '', handoverLeadValue: '', handoverLeadUnit: 'Months',
   compliances: '', otherSpecifications: '',
   fireNocAvailable: false,
   fireSafetyMeasures: '', landType: '', approachRoadWidth: '',
@@ -123,6 +138,13 @@ const toFormValues = (d) => {
     numberOfDocks: d.numberOfDocks ?? '',
     clearHeightFt: d.clearHeightFt ?? '',
     availability: d.availability || '',
+    availabilityLastReviewedOn: dateInputValue(d.availabilityLastReviewedOn),
+    status: d.status || '',
+    lockInDate: dateInputValue(d.lockInDate),
+    handoverType: d.handoverType === 'VARIABLE' ? 'Variable' : 'Fixed',
+    handoverDate: dateInputValue(d.handoverDate),
+    handoverLeadValue: d.handoverLeadValue ?? '',
+    handoverLeadUnit: HANDOVER_UNIT_OPTIONS.find(unit => unit.toUpperCase() === d.handoverLeadUnit) || 'Months',
     isBroker: d.isBroker || '',
     uploadedBy: d.uploadedBy || '',
     compliances: d.compliances || '',
@@ -309,7 +331,7 @@ const TextAreaInput = ({ value, onChange, mobile: _m, placeholder, rows = 3 }) =
   />
 );
 
-const SelectInput = ({ value, onChange, mobile: _m, placeholder, options, ...rest }) => {
+const SelectInput = ({ value, onChange, mobile: _m, placeholder, options, allowClear = false, ...rest }) => {
   // Preserve free-text values that don't match a predefined option, so an
   // existing entry is shown (and not silently overwritten) in edit mode while
   // the dropdown still lets the user switch to a standard option.
@@ -321,7 +343,7 @@ const SelectInput = ({ value, onChange, mobile: _m, placeholder, options, ...res
       onChange={e => onChange(e.target.value)}
       {...rest}
     >
-      <option value="" disabled>{placeholder}</option>
+      <option value="" disabled={!allowClear}>{placeholder}</option>
       {hasCustomValue && <option value={value}>{value} (current)</option>}
       {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>
@@ -494,8 +516,10 @@ const clearDraft = () => {
 
 const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loading = false }) => {
   const { isMobile } = useViewport();
+  const readinessId = useId();
   const [values, setValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
+  const [incompleteInputs, setIncompleteInputs] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [draftRestored, setDraftRestored] = useState(false);
@@ -550,6 +574,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         setDraftRestored(false);
       }
       setErrors({});
+      setIncompleteInputs({});
       setInitialSnapshot(initialData);
       setContactTouched(false);
     }
@@ -575,10 +600,36 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
   }, [visible, initialData, initialSnapshot, contactTouched]);
 
   const set = (field) => (val) => {
-    setValues(prev => ({ ...prev, [field]: val }));
+    const availabilityChanged = field === 'availability'
+      && normalizeAvailability(values.availability) !== normalizeAvailability(val);
+    setValues(prev => ({
+      ...prev, [field]: val,
+      ...(availabilityChanged ? { availabilityLastReviewedOn: '' } : {}),
+    }));
+    if (availabilityChanged) {
+      setIncompleteInputs(prev => ({ ...prev, availabilityLastReviewedOn: false }));
+    }
+    // Unmounting a native input discards its partial, uncommitted text. Complete
+    // values remain in form state and are restored when switching back.
+    if (field === 'handoverType') {
+      setIncompleteInputs(prev => ({ ...prev, handoverDate: false, handoverLeadValue: false }));
+    }
     if (field === 'contactNumber') setContactTouched(true);
     // Clear error on change
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
+    if (errors[field] || availabilityChanged) {
+      setErrors(prev => ({
+        ...prev, [field]: null,
+        ...(availabilityChanged ? { availabilityLastReviewedOn: null } : {}),
+      }));
+    }
+  };
+
+  const trackInputValidity = event => {
+    const field = event.currentTarget.dataset.field;
+    const badInput = event.currentTarget.validity.badInput;
+    // Native date/number controls expose partial text as value="". Date segments
+    // may not emit input/change until complete, so also check keyup and blur.
+    setIncompleteInputs(prev => Boolean(prev[field]) === badInput ? prev : { ...prev, [field]: badInput });
   };
 
   const setStateField = (val) => {
@@ -622,6 +673,37 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       const n = Number(values.chargeableArea);
       if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
         e.chargeableArea = 'Chargeable area must be a non-negative whole number';
+      }
+    }
+
+    for (const field of ['availabilityLastReviewedOn', 'handoverDate', 'lockInDate']) {
+      if (fields.includes(field) && (incompleteInputs[field] || (values[field] && !isCalendarDate(values[field])))) {
+        if (field === 'handoverDate' && values.handoverType === 'Variable') {
+          e.handoverType = 'Switch to Fixed to correct the handover date';
+        } else {
+          e[field] = 'Enter a complete, valid date';
+        }
+      }
+    }
+
+    if (fields.includes('availabilityLastReviewedOn') && values.availabilityLastReviewedOn && !e.availabilityLastReviewedOn) {
+      if (!values.availability?.trim()) {
+        e.availabilityLastReviewedOn = 'Enter availability before recording a review date';
+      } else if (values.availabilityLastReviewedOn > todayInIndia()) {
+        e.availabilityLastReviewedOn = 'Review date cannot be in the future';
+      }
+    }
+
+    if (fields.includes('handoverLeadValue') && (incompleteInputs.handoverLeadValue || (values.handoverLeadValue !== '' && values.handoverLeadValue != null))) {
+      const n = Number(values.handoverLeadValue);
+      if (incompleteInputs.handoverLeadValue || !Number.isInteger(n) || n < 1 || n > 120) {
+        // Both modes are saved. Point to the visible mode selector if the invalid
+        // lead time is currently hidden, so the scout can get back to its input.
+        if (values.handoverType === 'Variable') {
+          e.handoverLeadValue = 'Lead time must be a whole number between 1 and 120';
+        } else {
+          e.handoverType = 'Switch to Variable to correct the lead time (a whole number between 1 and 120)';
+        }
       }
     }
 
@@ -681,7 +763,13 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     // form submission when the user presses Enter on earlier steps, since all
     // steps are rendered in the DOM and the browser can find the submit button.
     if (currentStep !== formSteps.length - 1) return;
-    if (!validateStep(currentStep)) return;
+    // Restored drafts can open on the final step; recheck earlier steps before saving.
+    const invalidStep = formSteps.findIndex((_, index) => Object.keys(getStepErrors(index)).length > 0);
+    if (invalidStep !== -1) {
+      setCurrentStep(invalidStep);
+      validateStep(invalidStep);
+      return;
+    }
     if (mediaUploading) {
       setErrors(prev => ({ ...prev, _media: 'Please wait for media uploads to finish before submitting.' }));
       return;
@@ -714,6 +802,16 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         otherSpecifications: values.otherSpecifications || null,
         ratePerSqft: values.ratePerSqft !== '' && values.ratePerSqft != null ? String(values.ratePerSqft) : null,
         availability: values.availability || null,
+        availabilityLastReviewedOn: values.availabilityLastReviewedOn || null,
+        status: values.status || null,
+        // Preserve both modes when switching, matching the dashboard and API.
+        handoverType: values.handoverType === 'Variable' ? 'VARIABLE' : 'FIXED',
+        handoverDate: values.handoverDate || null,
+        handoverLeadValue: values.handoverLeadValue === '' || values.handoverLeadValue == null
+          ? null
+          : Number(values.handoverLeadValue),
+        handoverLeadUnit: values.handoverLeadUnit ? values.handoverLeadUnit.toUpperCase() : null,
+        lockInDate: values.lockInDate || null,
         uploadedBy: values.uploadedBy,
         isBroker: values.isBroker || null,
         photos: photosValue,
@@ -789,6 +887,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       clearDraft();
       setDraftRestored(false);
       setValues(INITIAL_VALUES);
+      setIncompleteInputs({});
       setCurrentStep(0);
     } catch (err) {
       // Form data is preserved so the user can retry
@@ -803,6 +902,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     setDraftRestored(false);
     setValues(INITIAL_VALUES);
     setErrors({});
+    setIncompleteInputs({});
     clearErrors();
     onCancel();
   }, [onCancel]);
@@ -813,6 +913,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     setValues(INITIAL_VALUES);
     setCurrentStep(0);
     setErrors({});
+    setIncompleteInputs({});
   }, []);
 
   // ── totalSpaceSqft list helpers ─────────────────────────────────────────────
@@ -850,7 +951,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
             />
           </div>
         )}
-        <form className="warehouse-form-inner" onSubmit={handleSubmit}>
+        <form className="warehouse-form-inner" onSubmit={handleSubmit} noValidate>
           {draftRestored && (
             <div className="warehouse-form-draft-banner" role="status">
               <span>Restored unsaved draft from your last session.</span>
@@ -1364,13 +1465,82 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   true)
               )}
 
-              {row(
-                col(
-                  <Field label="Availability">
-                    <TextInput mobile={m} value={values.availability} onChange={set('availability')} placeholder="Please mention the date of availability." />
+            </Section>
+
+            <Section title="Availability / Readiness">
+              {row(<>
+                {col(
+                  <Field label="Availability" htmlFor={readinessId + '-availability'}>
+                    <TextInput id={readinessId + '-availability'} mobile={m} value={values.availability} onChange={set('availability')}
+                      placeholder="Please mention the date of availability." data-field="availability" />
                   </Field>,
-                  true)
-              )}
+                  true)}
+                {col(
+                  <Field label="Availability last reviewed" htmlFor={readinessId + '-reviewed'} error={errors.availabilityLastReviewedOn}>
+                    {/* A changed answer also resets any unfinished native date segments. */}
+                    <TextInput key={normalizeAvailability(values.availability)} id={readinessId + '-reviewed'} type="date" value={values.availabilityLastReviewedOn}
+                      onChange={set('availabilityLastReviewedOn')} max={todayInIndia()} data-field="availabilityLastReviewedOn"
+                      onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
+                      aria-invalid={!!errors.availabilityLastReviewedOn} aria-describedby={readinessId + '-reviewed-help'} />
+                    <p id={readinessId + '-reviewed-help'} style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      Changing availability clears this date. Set it after confirming availability.
+                    </p>
+                  </Field>,
+                  true)}
+              </>)}
+
+              {row(<>
+                {col(
+                  <Field label="Handover Type" htmlFor={readinessId + '-handover-type'} error={errors.handoverType}
+                    tooltip="Choose Fixed for a known handover date, or Variable for a lead time from today.">
+                    <SelectInput id={readinessId + '-handover-type'} value={values.handoverType} onChange={set('handoverType')}
+                      options={HANDOVER_TYPE_OPTIONS} placeholder="Select handover type" data-field="handoverType" />
+                  </Field>,
+                  true)}
+                {values.handoverType !== 'Variable' && col(
+                  <Field label="Handover Date" htmlFor={readinessId + '-handover-date'} error={errors.handoverDate}>
+                    <TextInput id={readinessId + '-handover-date'} type="date" value={values.handoverDate}
+                      onChange={set('handoverDate')} data-field="handoverDate"
+                      onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
+                      aria-invalid={!!errors.handoverDate} />
+                  </Field>,
+                  true)}
+              </>)}
+
+              {values.handoverType === 'Variable' && row(<>
+                {col(
+                  <Field label="Handover Lead Time" htmlFor={readinessId + '-lead-value'} error={errors.handoverLeadValue}>
+                    <TextInput id={readinessId + '-lead-value'} type="number" inputMode="numeric" min="1" max="120" step="1"
+                      value={values.handoverLeadValue} onChange={set('handoverLeadValue')} placeholder="e.g. 2"
+                      data-field="handoverLeadValue" onInput={trackInputValidity} onBlur={trackInputValidity}
+                      aria-invalid={!!errors.handoverLeadValue} />
+                  </Field>,
+                  true)}
+                {col(
+                  <Field label="Handover Lead-time Unit" htmlFor={readinessId + '-lead-unit'}>
+                    <SelectInput id={readinessId + '-lead-unit'} value={values.handoverLeadUnit} onChange={set('handoverLeadUnit')}
+                      options={HANDOVER_UNIT_OPTIONS} placeholder="Select unit" data-field="handoverLeadUnit" />
+                  </Field>,
+                  true)}
+              </>)}
+
+              {row(<>
+                {col(
+                  <Field label="Lock-in Date" htmlFor={readinessId + '-lock-in'} error={errors.lockInDate}
+                    tooltip="When the current lock-in or agreement ends and the warehouse could become available.">
+                    <TextInput id={readinessId + '-lock-in'} type="date" value={values.lockInDate}
+                      onChange={set('lockInDate')} data-field="lockInDate"
+                      onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
+                      aria-invalid={!!errors.lockInDate} />
+                  </Field>,
+                  true)}
+                {col(
+                  <Field label="Construction Status" htmlFor={readinessId + '-status'}>
+                    <SelectInput id={readinessId + '-status'} value={values.status} onChange={set('status')}
+                      options={STATUS_OPTIONS} allowClear placeholder="Not recorded" data-field="status" />
+                  </Field>,
+                  true)}
+              </>)}
             </Section>
           </div>
 

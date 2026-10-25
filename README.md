@@ -152,6 +152,14 @@ curried setter. There is no context and no store: one screen, one owner.
 `alt_phone_number` is optional but phone-shape-checked when filled. `totalSpaceSqft` is an
 array (a site can have multiple blocks); values must be positive whole numbers.
 
+The Commercials step also collects optional availability/readiness details: the last
+availability review date, fixed or variable handover timing, lock-in date, and construction
+status. Review dates require an availability value and cannot be in the future (India time).
+Changing availability clears its review date; select the date again after confirming the
+new answer. Construction status can be cleared by selecting **Not recorded**.
+Handover lead time is a whole number from 1 to 120, in days, weeks, or months. Switching
+handover modes preserves both sets of values, including in saved drafts.
+
 Selecting **Delhi** or **Chandigarh** auto-fills the city, since the state and the city are
 effectively the same choice there.
 
@@ -262,6 +270,34 @@ npm run test:coverage
 
 Existing specs: `WarehouseForm`, `FileUpload`, `SuccessPage`, `apiClient`,
 `warehouseService`, `errorHandler`, `toast`, `phone`, `mediaUtils`, `useViewport`.
+
+The Playwright readiness suite builds the production Scout app and runs it against
+the real backend validators, Scout authentication, services and SQL on disposable
+PostgreSQL. It checks mobile/desktop submission, both handover modes, draft recovery,
+optional fields, invalid inputs, failed authentication/database writes, and manual/automatic
+approval. Mobile navigation checks for overflow at each step; hidden help tooltips are
+removed from layout so they cannot expand the viewport and hide the action bar.
+Install the sibling `Backend_Repository` dependencies and generate its Prisma client first.
+
+```bash
+npx playwright install chromium
+podman run --detach --rm --name scout-readiness-e2e \
+  --publish 127.0.0.1:55432:5432 --tmpfs /var/lib/postgresql/data \
+  --env POSTGRES_USER=warehouse_test --env POSTGRES_PASSWORD=warehouse_test \
+  --env POSTGRES_DB=warehouse_qa docker.io/library/postgres:16-alpine
+podman exec scout-readiness-e2e pg_isready -U warehouse_test -d warehouse_qa
+TEST_DATABASE_URL=postgresql://warehouse_test:warehouse_test@127.0.0.1:55432/warehouse_qa npm run test:e2e
+podman stop scout-readiness-e2e
+```
+
+The database URL guard permits only those test credentials/database on `127.0.0.1`
+with an explicit port. Each run creates and removes its own schema and does not load
+the backend `.env`. `E2E_BACKEND_ROOT` selects another backend checkout;
+`E2E_BROWSER_PATH` optionally selects an installed Chromium/Chrome executable.
+Failures retain screenshots and traces under `test-results/`, with an HTML report
+under `playwright-report/`. The reviewer identity is supplied by the fixture;
+Google sign-in, rate limiting, media processing and production infrastructure are
+outside this suite.
 
 [`CI_TESTS.md`](CI_TESTS.md) is the full intended test plan — every scenario written as a
 numbered, 1:1-implementable case (step navigation, validation, upload lifecycle, error
