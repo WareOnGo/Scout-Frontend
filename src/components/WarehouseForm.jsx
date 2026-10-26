@@ -523,7 +523,7 @@ const clearDraft = () => {
 const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loading = false }) => {
   const { isMobile } = useViewport();
   const readinessId = useId();
-  const availabilitySnapshot = useRef(null);
+  const [availabilitySnapshot, setAvailabilitySnapshot] = useState(null);
   const reviewDateTouched = useRef(false);
   const [values, setValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
@@ -571,7 +571,6 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     if (visible) {
       // Only restore a draft when this is a brand-new form (no initialData edit context).
       const draft = !initialData ? loadDraft() : null;
-      availabilitySnapshot.current = draft?.values || initialData;
       reviewDateTouched.current = false;
       if (draft) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -585,6 +584,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       }
       setErrors({});
       setIncompleteInputs({});
+      setAvailabilitySnapshot(draft?.values || initialData);
       setInitialSnapshot(initialData);
       setContactTouched(false);
     }
@@ -613,11 +613,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     const availabilityChanged = field === 'availability'
       && normalizeAvailability(values.availability) !== normalizeAvailability(val);
     if (field === 'availabilityLastReviewedOn') reviewDateTouched.current = true;
-    setValues(prev => ({
-      ...prev, [field]: val,
-      ...(field === 'availability' && !reviewDateTouched.current
-        ? { availabilityLastReviewedOn: suggestedReviewDate(availabilitySnapshot.current, val) } : {}),
-    }));
+    const reviewDateUpdate = field === 'availability' && !reviewDateTouched.current
+      ? { availabilityLastReviewedOn: suggestedReviewDate(availabilitySnapshot, val) } : {};
+    setValues(prev => ({ ...prev, [field]: val, ...reviewDateUpdate }));
     if (availabilityChanged) {
       setIncompleteInputs(prev => ({ ...prev, availabilityLastReviewedOn: false }));
     }
@@ -899,7 +897,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       clearDraft();
       setDraftRestored(false);
       setValues(INITIAL_VALUES);
-      availabilitySnapshot.current = null;
+      setAvailabilitySnapshot(null);
       reviewDateTouched.current = false;
       setIncompleteInputs({});
       setCurrentStep(0);
@@ -915,7 +913,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     clearDraft();
     setDraftRestored(false);
     setValues(INITIAL_VALUES);
-    availabilitySnapshot.current = null;
+    setAvailabilitySnapshot(null);
     reviewDateTouched.current = false;
     setErrors({});
     setIncompleteInputs({});
@@ -927,7 +925,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     clearDraft();
     setDraftRestored(false);
     setValues(INITIAL_VALUES);
-    availabilitySnapshot.current = null;
+    setAvailabilitySnapshot(null);
     reviewDateTouched.current = false;
     setCurrentStep(0);
     setErrors({});
@@ -1504,8 +1502,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                     <p id={readinessId + '-reviewed-help'} style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                       Select the date availability was last checked. Past dates are allowed.
                     </p>
-                    {values.availabilityLastReviewedOn && dateInputValue(availabilitySnapshot.current?.availabilityLastReviewedOn)
-                      && values.availabilityLastReviewedOn < dateInputValue(availabilitySnapshot.current.availabilityLastReviewedOn) && (
+                    {values.availabilityLastReviewedOn && dateInputValue(availabilitySnapshot?.availabilityLastReviewedOn)
+                      && values.availabilityLastReviewedOn < dateInputValue(availabilitySnapshot.availabilityLastReviewedOn) && (
                       <p role="status" className="form-warning">
                         This replaces a more recent review date. Check that you are correcting the recorded date.
                       </p>
