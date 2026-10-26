@@ -155,8 +155,11 @@ array (a site can have multiple blocks); values must be positive whole numbers.
 The Commercials step also collects optional availability/readiness details: the last
 availability review date, fixed or variable handover timing, lock-in date, and construction
 status. Review dates require an availability value and cannot be in the future (India time).
-Changing availability clears its review date; select the date again after confirming the
-new answer. Construction status can be cleared by selecting **Not recorded**.
+Availability uses the dashboard's Yes/No choices: whether the space can be booked now or
+within six months. Existing saved free-text answers remain visible until changed.
+As in the dashboard, changing a saved Yes/No answer suggests today's review date unless
+a date was chosen manually; changing back restores the original date. Construction status
+can be cleared by selecting **Not recorded**.
 Handover lead time is a whole number from 1 to 120, in days, weeks, or months. Switching
 handover modes preserves both sets of values, including in saved drafts.
 
@@ -277,6 +280,11 @@ PostgreSQL. It checks mobile/desktop submission, both handover modes, draft reco
 optional fields, invalid inputs, failed authentication/database writes, and manual/automatic
 approval. Mobile navigation checks for overflow at each step; hidden help tooltips are
 removed from layout so they cannot expand the viewport and hide the action bar.
+Adversarial cases cover rapid mode changes, invalid hidden draft values, clearing dates,
+legacy answers, discarded drafts, duplicate clicks during a delayed request, connection
+loss, leap days and browser timezones on either side of India's date boundary. Direct API
+rejection tests include a valid control and check the exact field error, so an unrelated
+missing field cannot produce a false pass.
 Install the sibling `Backend_Repository` dependencies and generate its Prisma client first.
 
 ```bash

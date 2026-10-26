@@ -28,6 +28,12 @@ const isCalendarDate = value => {
 const todayInIndia = () => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
 }).format(new Date());
+const suggestedReviewDate = (original, availability) => {
+  const before = normalizeAvailability(original?.availability);
+  const after = normalizeAvailability(availability);
+  if (before === after) return dateInputValue(original?.availabilityLastReviewedOn);
+  return ['yes', 'no'].includes(before) && ['yes', 'no'].includes(after) ? todayInIndia() : '';
+};
 
 const INDIA_STATE_CITIES = {
   'Andhra Pradesh': ['Alluri Sitharama Raju', 'Anakapalli', 'Anantapur', 'Ananthapuramu', 'Annamayya', 'Bapatla', 'Bhimavaram', 'Chittoor', 'Dr. B. R. Ambedkar Konaseema', 'East Godavari', 'Eluru', 'Guntur', 'Hindupur', 'Kadapa', 'Kakinada', 'Krishna', 'Kurnool', 'Machilipatnam', 'Markapuram', 'Nandyal', 'Nellore', 'NTR', 'Ongole', 'Palnadu', 'Parvathipuram Manyam', 'Polavaram', 'Prakasam', 'Rajahmundry', 'Sri Potti Sriramulu Nellore', 'Sri Sathya Sai', 'Srikakulam', 'Tenali', 'Tirupati', 'Vijayawada', 'Visakhapatnam', 'Vizianagaram', 'West Godavari', 'YSR Kadapa'],
@@ -292,10 +298,10 @@ const HelpTip = ({ text }) => (
   </span>
 );
 
-const Field = ({ label, required, error, warning, children, style, tooltip }) => (
+const Field = ({ label, required, error, warning, children, style, tooltip, htmlFor }) => (
   <div className="form-field" style={style}>
     {label && (
-      <label className="form-label">
+      <label className="form-label" htmlFor={htmlFor}>
         {label}
         {required && <span className="form-required"> *</span>}
         {tooltip && <HelpTip text={tooltip} />}
@@ -517,6 +523,8 @@ const clearDraft = () => {
 const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loading = false }) => {
   const { isMobile } = useViewport();
   const readinessId = useId();
+  const availabilitySnapshot = useRef(null);
+  const reviewDateTouched = useRef(false);
   const [values, setValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [incompleteInputs, setIncompleteInputs] = useState({});
@@ -563,6 +571,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     if (visible) {
       // Only restore a draft when this is a brand-new form (no initialData edit context).
       const draft = !initialData ? loadDraft() : null;
+      availabilitySnapshot.current = draft?.values || initialData;
+      reviewDateTouched.current = false;
       if (draft) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setValues({ ...INITIAL_VALUES, ...draft.values });
@@ -602,9 +612,11 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
   const set = (field) => (val) => {
     const availabilityChanged = field === 'availability'
       && normalizeAvailability(values.availability) !== normalizeAvailability(val);
+    if (field === 'availabilityLastReviewedOn') reviewDateTouched.current = true;
     setValues(prev => ({
       ...prev, [field]: val,
-      ...(availabilityChanged ? { availabilityLastReviewedOn: '' } : {}),
+      ...(field === 'availability' && !reviewDateTouched.current
+        ? { availabilityLastReviewedOn: suggestedReviewDate(availabilitySnapshot.current, val) } : {}),
     }));
     if (availabilityChanged) {
       setIncompleteInputs(prev => ({ ...prev, availabilityLastReviewedOn: false }));
@@ -688,7 +700,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
     if (fields.includes('availabilityLastReviewedOn') && values.availabilityLastReviewedOn && !e.availabilityLastReviewedOn) {
       if (!values.availability?.trim()) {
-        e.availabilityLastReviewedOn = 'Enter availability before recording a review date';
+        e.availabilityLastReviewedOn = 'Select availability before recording a review date';
       } else if (values.availabilityLastReviewedOn > todayInIndia()) {
         e.availabilityLastReviewedOn = 'Review date cannot be in the future';
       }
@@ -887,6 +899,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       clearDraft();
       setDraftRestored(false);
       setValues(INITIAL_VALUES);
+      availabilitySnapshot.current = null;
+      reviewDateTouched.current = false;
       setIncompleteInputs({});
       setCurrentStep(0);
     } catch (err) {
@@ -901,6 +915,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     clearDraft();
     setDraftRestored(false);
     setValues(INITIAL_VALUES);
+    availabilitySnapshot.current = null;
+    reviewDateTouched.current = false;
     setErrors({});
     setIncompleteInputs({});
     clearErrors();
@@ -911,6 +927,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     clearDraft();
     setDraftRestored(false);
     setValues(INITIAL_VALUES);
+    availabilitySnapshot.current = null;
+    reviewDateTouched.current = false;
     setCurrentStep(0);
     setErrors({});
     setIncompleteInputs({});
@@ -1467,12 +1485,13 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
             </Section>
 
-            <Section title="Availability / Readiness">
+            <Section title="Availability">
               {row(<>
                 {col(
-                  <Field label="Availability" htmlFor={readinessId + '-availability'}>
-                    <TextInput id={readinessId + '-availability'} mobile={m} value={values.availability} onChange={set('availability')}
-                      placeholder="Please mention the date of availability." data-field="availability" />
+                  <Field label="Availability" htmlFor={readinessId + '-availability'}
+                    tooltip="Select Yes if the space can be booked now or within the next 6 months; otherwise select No.">
+                    <SelectInput id={readinessId + '-availability'} mobile={m} value={values.availability} onChange={set('availability')}
+                      options={['Yes', 'No']} placeholder="Select availability" data-field="availability" />
                   </Field>,
                   true)}
                 {col(
@@ -1483,8 +1502,14 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                       onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
                       aria-invalid={!!errors.availabilityLastReviewedOn} aria-describedby={readinessId + '-reviewed-help'} />
                     <p id={readinessId + '-reviewed-help'} style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Changing availability clears this date. Set it after confirming availability.
+                      Select the date availability was last checked. Past dates are allowed.
                     </p>
+                    {values.availabilityLastReviewedOn && dateInputValue(availabilitySnapshot.current?.availabilityLastReviewedOn)
+                      && values.availabilityLastReviewedOn < dateInputValue(availabilitySnapshot.current.availabilityLastReviewedOn) && (
+                      <p role="status" className="form-warning">
+                        This replaces a more recent review date. Check that you are correcting the recorded date.
+                      </p>
+                    )}
                   </Field>,
                   true)}
               </>)}
@@ -1532,7 +1557,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
               {row(<>
                 {col(
                   <Field label="Lock-in Date" htmlFor={readinessId + '-lock-in'} error={errors.lockInDate}
-                    tooltip="When the current lock-in or agreement ends and the warehouse could become available.">
+                    tooltip="If availability is No, enter when the current lock-in or agreement ends and the warehouse could become available.">
                     <TextInput id={readinessId + '-lock-in'} type="date" value={values.lockInDate}
                       onChange={set('lockInDate')} data-field="lockInDate"
                       onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
@@ -1540,7 +1565,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   </Field>,
                   true)}
                 {col(
-                  <Field label="Construction Status" htmlFor={readinessId + '-status'}>
+                  <Field label="Construction Status" htmlFor={readinessId + '-status'}
+                    tooltip="The building's construction status, regardless of whether it is occupied.">
                     <SelectInput id={readinessId + '-status'} value={values.status} onChange={set('status')}
                       options={STATUS_OPTIONS} allowClear placeholder="Not recorded" data-field="status" />
                   </Field>,

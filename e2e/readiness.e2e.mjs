@@ -119,7 +119,8 @@ for (const width of [320, 390, 1280]) {
       await fillFreshForm(page);
       const values = { availability: 'Yes', availabilityLastReviewedOn: '2025-01-10',
         handoverDate: '2027-01-15', lockInDate: '2027-01-01', status: 'Under construction' };
-      for (const key of ['availability', 'availabilityLastReviewedOn', 'handoverDate', 'lockInDate']) await field(page, key).fill(values[key]);
+      await field(page, 'availability').selectOption(values.availability);
+      for (const key of ['availabilityLastReviewedOn', 'handoverDate', 'lockInDate']) await field(page, key).fill(values[key]);
       await field(page, 'status').selectOption(values.status);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
       await field(page, 'availability').scrollIntoViewIfNeeded();
@@ -150,18 +151,19 @@ for (const [unit, value] of [['Days', 1], ['Weeks', 2], ['Months', 120]]) {
   });
 }
 
-test('a changed availability and cleared construction status stay cleared after reload and approval', async ({ page, request }) => {
-  await restore(page, { availability: 'Yes', availabilityLastReviewedOn: '2025-01-10', status: 'Ready to move' });
-  await field(page, 'availability').fill(' yes ');
+test('availability suggests today and cleared construction status stays cleared after reload and approval', async ({ page, request }) => {
+  await restore(page, { availability: ' yes ', availabilityLastReviewedOn: '2025-01-10', status: 'Ready to move' });
+  await field(page, 'availability').selectOption('Yes');
   await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('2025-01-10');
-  await field(page, 'availability').fill('No');
-  await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('');
+  await field(page, 'availability').selectOption('No');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue(today);
   await field(page, 'status').selectOption('');
   await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).values.status, draftKey)).toBe('');
   await page.reload();
-  await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('');
+  await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue(today);
   await expect(field(page, 'status')).toHaveValue('');
-  await verifyStored(request, await submit(page), { availability: 'No', availabilityLastReviewedOn: null, status: null });
+  await verifyStored(request, await submit(page), { availability: 'No', availabilityLastReviewedOn: today, status: null });
 });
 
 test('an older draft with all new optional fields absent still submits', async ({ page, request }) => {
@@ -183,8 +185,8 @@ test('invalid lead times and review dates are blocked before any submission requ
   await field(page, 'handoverLeadValue').fill('2');
   await field(page, 'availabilityLastReviewedOn').fill('2025-01-10');
   await next(page);
-  await expect(page.getByText('Enter availability before recording a review date', { exact: true })).toBeVisible();
-  await field(page, 'availability').fill('Yes');
+  await expect(page.getByText('Select availability before recording a review date', { exact: true })).toBeVisible();
+  await field(page, 'availability').selectOption('Yes');
   await field(page, 'availabilityLastReviewedOn').fill('2999-01-01');
   await next(page);
   await expect(page.getByText('Review date cannot be in the future', { exact: true })).toBeVisible();
@@ -264,8 +266,248 @@ test('the API rejects invalid readiness data even if client validation is bypass
     { availabilityLastReviewedOn: '2999-01-01' }, { availabilityLastReviewedOn: '2025-02-30' },
     { status: 'Invented status' }, { handoverDate: 'not-a-date' },
   ]) {
-    const response = await request.post(`${server.url}/api/warehouses/scout`, { data: { ...required, availability: 'Yes', ...invalid } });
-    expect(response.status(), JSON.stringify(await response.json())).toBe(400);
+    const response = await request.post(`${server.url}/api/warehouses/scout`, {
+      data: { ...required, warehouseData: {}, availability: 'Yes', ...invalid },
+    });
+    const body = await response.json();
+    expect(response.status(), JSON.stringify(body)).toBe(400);
+    expect(body.details.issues.length).toBeGreaterThan(0);
+    expect(body.details.issues.every(issue => Object.hasOwn(invalid, issue.path[0]))).toBe(true);
   }
   expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+});
+
+test.describe('adversarial availability', () => {
+  const indiaToday = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const draftValue = (page, key) => page.evaluate(({ draftKey, key }) =>
+    JSON.parse(localStorage.getItem(draftKey))?.values[key], { draftKey, key });
+  const finishSteps = async page => {
+    while (await page.getByRole('button', { name: /^Next$/ }).isVisible()) await next(page);
+    const button = page.getByRole('button', { name: 'Create Warehouse', exact: true });
+    await expect(button).toBeEnabled();
+    return button;
+  };
+  const isSubmission = response => response.url() === `${server.url}/api/warehouses/scout`
+    && response.request().method() === 'POST';
+
+  test.describe('on a narrow touch screen', () => {
+    test.use({ viewport: { width: 320, height: 800 }, isMobile: true, hasTouch: true });
+
+    test('rapid mode changes preserve both answers through navigation, reload and approval', async ({ page, request }) => {
+      await restore(page, { availability: 'No', handoverDate: '2028-02-29', lockInDate: '2028-01-31' });
+      await field(page, 'handoverType').selectOption('Variable');
+      await field(page, 'handoverLeadValue').fill('120');
+      await field(page, 'handoverLeadUnit').selectOption('Days');
+      for (let i = 0; i < 6; i++) {
+        await field(page, 'handoverType').selectOption('Fixed');
+        await expect(field(page, 'handoverDate')).toHaveValue('2028-02-29');
+        await field(page, 'handoverType').selectOption('Variable');
+        await expect(field(page, 'handoverLeadValue')).toHaveValue('120');
+      }
+      await next(page);
+      await pressButton(page, page.getByRole('button', { name: /^Previous$/ }));
+      await expect.poll(() => draftValue(page, 'handoverType')).toBe('Variable');
+      await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).currentStep, draftKey)).toBe(4);
+      await page.reload();
+      await expect(field(page, 'handoverLeadUnit')).toHaveValue('Days');
+      await verifyStored(request, await submit(page), { availability: 'No', handoverType: 'VARIABLE',
+        handoverDate: '2028-02-29', handoverLeadValue: 120, handoverLeadUnit: 'DAYS', lockInDate: '2028-01-31' });
+    });
+  });
+
+  test('a broken hidden fixed date in a final-step draft must be corrected before saving', async ({ page, request }) => {
+    await restore(page, { availability: 'Yes', handoverType: 'Variable', handoverDate: '2025-02-30',
+      handoverLeadValue: '2', handoverLeadUnit: 'Weeks' }, 5);
+    const count = await server.prisma.stagedWarehouse.count();
+    await (await finishSteps(page)).click();
+    await expect(page.getByText('Switch to Fixed to correct the handover date', { exact: true })).toBeVisible();
+    expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+    await field(page, 'handoverType').selectOption('Fixed');
+    await field(page, 'handoverDate').fill('2028-02-29');
+    await field(page, 'handoverType').selectOption('Variable');
+    await verifyStored(request, await submit(page), { handoverType: 'VARIABLE', handoverDate: '2028-02-29',
+      handoverLeadValue: 2, handoverLeadUnit: 'WEEKS' });
+  });
+
+  test('explicitly clearing the review date survives answer changes and reload', async ({ page, request }) => {
+    await restore(page, { availability: 'Yes', availabilityLastReviewedOn: '2025-01-10' });
+    await field(page, 'availability').selectOption('No');
+    await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue(indiaToday());
+    await field(page, 'availability').selectOption('Yes');
+    await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('2025-01-10');
+    await field(page, 'availabilityLastReviewedOn').fill('');
+    for (const availability of ['No', 'Yes', 'No']) {
+      await field(page, 'availability').selectOption(availability);
+      await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('');
+    }
+    await expect.poll(() => draftValue(page, 'availability')).toBe('No');
+    await page.reload();
+    await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('');
+    await verifyStored(request, await submit(page), { availability: 'No', availabilityLastReviewedOn: null });
+  });
+
+  test('a legacy free-text answer is preserved verbatim through submission and approval', async ({ page, request }) => {
+    const availability = 'Under construction / Available in August';
+    await restore(page, { availability, availabilityLastReviewedOn: '2025-01-10' });
+    await expect(field(page, 'availability').locator('option:checked')).toHaveText(`${availability} (current)`);
+    await verifyStored(request, await submit(page), { availability, availabilityLastReviewedOn: '2025-01-10' });
+  });
+
+  test('discarding a draft resets readiness values and the review-date baseline', async ({ page }) => {
+    await restore(page, { availability: 'Yes', availabilityLastReviewedOn: '2025-01-10', handoverType: 'Variable',
+      handoverDate: '2028-02-29', handoverLeadValue: '120', handoverLeadUnit: 'Months', status: 'Ready to move' });
+    await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+    // Fill the required fields without reloading, so reset state is exercised in this same component.
+    await field(page, 'listing_type').selectOption('Rent');
+    for (const key of ['contactPerson', 'contactNumber', 'uploadedBy']) await field(page, key).fill(required[key]);
+    await next(page);
+    await page.getByPlaceholder('Enter locality').fill(required.address);
+    await field(page, 'state').fill('Delhi');
+    await page.locator('.combobox-option').filter({ hasText: /^Delhi$/ }).click();
+    await next(page);
+    await field(page, 'warehouseType').selectOption('PEB');
+    await next(page);
+    await page.getByPlaceholder('Please only mention conversion-related and Fire NOC-related status.').fill(required.compliances);
+    await next(page);
+    await expect(field(page, 'availability')).toHaveValue('');
+    await expect(field(page, 'handoverType')).toHaveValue('Fixed');
+    await expect(field(page, 'handoverDate')).toHaveValue('');
+    await expect(field(page, 'status')).toHaveValue('');
+    await field(page, 'availability').selectOption('No');
+    await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue('');
+    await field(page, 'handoverType').selectOption('Variable');
+    await expect(field(page, 'handoverLeadValue')).toHaveValue('');
+    await expect(field(page, 'handoverLeadUnit')).toHaveValue('');
+  });
+
+  test('changing availability clears an unfinished native date without leaving a hidden error', async ({ page, request }) => {
+    await restore(page, { availability: 'Yes' });
+    const input = field(page, 'availabilityLastReviewedOn');
+    await input.focus();
+    await input.pressSequentially('10');
+    expect(await input.evaluate(node => node.validity.badInput)).toBe(true);
+    await next(page);
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await field(page, 'availability').selectOption('No');
+    await expect(input).toHaveValue(indiaToday());
+    expect(await input.evaluate(node => node.validity.badInput)).toBe(false);
+    await verifyStored(request, await submit(page), { availability: 'No', availabilityLastReviewedOn: indiaToday() });
+  });
+
+  for (const [label, lead, unit] of [['number only', '2', ''], ['unit only', '', 'Weeks']]) {
+    test(`optional Variable ${label} is stored without inventing the missing answer`, async ({ page, request }) => {
+      await restore(page, { handoverType: 'Variable', handoverLeadValue: lead, handoverLeadUnit: unit });
+      await verifyStored(request, await submit(page), { handoverType: 'VARIABLE',
+        handoverLeadValue: lead ? Number(lead) : null, handoverLeadUnit: unit ? unit.toUpperCase() : null });
+    });
+  }
+
+  test('double-clicking and pressing Enter during a delayed submission create only one record', async ({ page, request }) => {
+    await restore(page, { availability: 'No', handoverType: 'Variable', handoverLeadValue: '3', handoverLeadUnit: 'Weeks' });
+    const button = await finishSteps(page);
+    const count = await server.prisma.stagedWarehouse.count();
+    const posts = [];
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const hold = async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      posts.push(route.request().postDataJSON());
+      await gate;
+      await route.continue();
+    };
+    await page.route('**/api/warehouses/scout', hold);
+    const responsePromise = page.waitForResponse(isSubmission);
+    try {
+      await button.click({ clickCount: 2, delay: 25 });
+      await expect.poll(() => posts.length).toBe(1);
+      await expect(page.locator('button[type="submit"]')).toBeDisabled();
+      await page.keyboard.press('Enter');
+      expect(posts).toHaveLength(1);
+      expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+      await expect(page.getByRole('heading', { name: 'Submitted for review', exact: true })).toHaveCount(0);
+    } finally {
+      release();
+    }
+    const response = await responsePromise;
+    expect(response.status()).toBe(201);
+    await expect(page.getByRole('heading', { name: 'Submitted for review', exact: true })).toBeVisible();
+    await page.unroute('**/api/warehouses/scout', hold);
+    expect(posts).toHaveLength(1);
+    expect(await server.prisma.stagedWarehouse.count()).toBe(count + 1);
+    await verifyStored(request, await response.json(), { availability: 'No', handoverType: 'VARIABLE',
+      handoverLeadValue: 3, handoverLeadUnit: 'WEEKS' });
+  });
+
+  test('a disconnected request preserves all answers through reload and retry', async ({ page, request }) => {
+    const readiness = { availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
+      handoverType: 'Variable', handoverDate: '2028-02-29', handoverLeadValue: '2', handoverLeadUnit: 'Months',
+      lockInDate: '2027-12-31', status: 'Build to suit' };
+    await restore(page, readiness);
+    const button = await finishSteps(page);
+    await expect.poll(() => draftValue(page, 'handoverLeadUnit')).toBe('Months');
+    const count = await server.prisma.stagedWarehouse.count();
+    await page.route('**/api/warehouses/scout', route => route.abort('internetdisconnected'), { times: 1 });
+    const failed = page.waitForEvent('requestfailed', req => req.url().endsWith('/warehouses/scout'));
+    await button.click();
+    await failed;
+    await expect(button).toBeEnabled();
+    expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+    expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).values, draftKey)).toMatchObject(readiness);
+    await page.reload();
+    await verifyStored(request, await submit(page), { ...readiness, handoverType: 'VARIABLE',
+      handoverLeadValue: 2, handoverLeadUnit: 'MONTHS' });
+  });
+
+  for (const [timezoneId, localTime] of [['America/Los_Angeles', '00:15'], ['Pacific/Kiritimati', '23:45']]) {
+    test.describe(`with browser timezone ${timezoneId}`, () => {
+      test.use({ timezoneId });
+      test('the review date follows India at the day boundary and stored dates do not shift', async ({ page, request }) => {
+        const today = indiaToday();
+        await page.clock.setFixedTime(new Date(`${today}T${localTime}:00+05:30`));
+        await restore(page, { availability: 'No', handoverDate: '2028-02-29', lockInDate: '2024-02-29' });
+        const browserToday = await page.evaluate(() => new Intl.DateTimeFormat('en-CA', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(new Date()));
+        expect(browserToday).not.toBe(today);
+        await field(page, 'availability').selectOption('Yes');
+        await expect(field(page, 'availabilityLastReviewedOn')).toHaveValue(today);
+        await expect(field(page, 'availabilityLastReviewedOn')).toHaveAttribute('max', today);
+        await verifyStored(request, await submit(page), { availability: 'Yes', availabilityLastReviewedOn: today,
+          handoverDate: '2028-02-29', lockInDate: '2024-02-29' });
+      });
+    });
+  }
+
+  test('API rejects rollover dates and non-date values without saving or coercing them', async ({ request }) => {
+    // A valid control proves the request fixture itself can reach persistence.
+    // Otherwise a missing required field could make every negative case pass.
+    const control = await request.post(`${server.url}/api/warehouses/scout`, {
+      data: { ...required, warehouseData: {}, availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
+        handoverDate: '2028-02-29', lockInDate: '2028-02-29' },
+    });
+    const receipt = await control.json();
+    expect(control.status(), JSON.stringify(receipt)).toBe(201);
+    await verifyStored(request, receipt, { availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
+      handoverDate: '2028-02-29', lockInDate: '2028-02-29' });
+    const count = await server.prisma.stagedWarehouse.count();
+    for (const key of ['availabilityLastReviewedOn', 'handoverDate', 'lockInDate']) {
+      for (const value of ['2025-02-29', '2025-02-30', '0000-01-01', false, 0, '']) {
+        await test.step(`${key}: ${JSON.stringify(value)}`, async () => {
+          const response = await request.post(`${server.url}/api/warehouses/scout`, {
+            data: { ...required, warehouseData: {}, availability: 'Yes', [key]: value },
+          });
+          const body = await response.json();
+          expect.soft(response.status(), `${key}=${JSON.stringify(value)}: ${JSON.stringify(body)}`).toBe(400);
+          expect.soft(body.details?.issues?.map(issue => issue.path[0])).toContain(key);
+        });
+      }
+    }
+    const blankAvailability = await request.post(`${server.url}/api/warehouses/scout`, {
+      data: { ...required, warehouseData: {}, availability: '   ', availabilityLastReviewedOn: '2024-02-29' },
+    });
+    expect.soft(blankAvailability.status()).toBe(400);
+    expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+  });
 });

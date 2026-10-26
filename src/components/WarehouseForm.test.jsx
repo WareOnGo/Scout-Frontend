@@ -221,6 +221,9 @@ describe('WarehouseForm — availability and readiness', () => {
     totalSpaceSqft: [10000], availability: 'Yes',
   };
   const field = name => document.querySelector(`[data-field="${name}"]`);
+  const today = () => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
   const restoreDraft = (values = {}, currentStep = 4) => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       values: { ...validValues, ...values }, currentStep, savedAt: Date.now(),
@@ -350,27 +353,53 @@ describe('WarehouseForm — availability and readiness', () => {
     restoreDraft({ availability: '', availabilityLastReviewedOn: '2026-10-01' });
     render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: /^next$/i }));
-    expect(screen.getByText('Enter availability before recording a review date')).toBeInTheDocument();
+    expect(screen.getByText('Select availability before recording a review date')).toBeInTheDocument();
   });
 
-  it('clears a restored review date when availability changes and submits the cleared date', async () => {
+  it('offers Yes/No and suggests today for a saved Yes-to-No change like the dashboard', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({});
     restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
-    fireEvent.change(field('availability'), { target: { value: 'No' } });
-    expect(field('availabilityLastReviewedOn')).toHaveValue('');
+    expect(field('availability').tagName).toBe('SELECT');
+    expect([...field('availability').options].map(option => option.value)).toEqual(['', 'Yes', 'No']);
+    await user.selectOptions(field('availability'), 'No');
+    expect(field('availabilityLastReviewedOn')).toHaveValue(today());
     await waitFor(() => expect(JSON.parse(localStorage.getItem(DRAFT_KEY)).values).toMatchObject({
-      availability: 'No', availabilityLastReviewedOn: '',
+      availability: 'No', availabilityLastReviewedOn: today(),
     }));
-    expect(await submitForm(user, onSubmit)).toMatchObject({ availability: 'No', availabilityLastReviewedOn: null });
+    expect(await submitForm(user, onSubmit)).toMatchObject({ availability: 'No', availabilityLastReviewedOn: today() });
   });
 
   it.each(['yes', ' Yes ', 'YES'])('keeps the review date for an equivalent availability value %s', async availability => {
-    restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
+    restoreDraft({ availability, availabilityLastReviewedOn: '2026-10-01' });
     await act(async () => { render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />); });
-    fireEvent.change(field('availability'), { target: { value: availability } });
+    fireEvent.change(field('availability'), { target: { value: 'Yes' } });
     expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-01');
+  });
+
+  it('preserves an existing nonstandard availability answer until the scout selects Yes or No', async () => {
+    const user = userEvent.setup();
+    restoreDraft({ availability: 'Immediate', availabilityLastReviewedOn: '2026-10-01' });
+    render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    expect(field('availability')).toHaveValue('Immediate');
+    expect(within(field('availability')).getByRole('option', { name: 'Immediate (current)' })).toBeInTheDocument();
+    await user.selectOptions(field('availability'), 'No');
+    expect(field('availabilityLastReviewedOn')).toHaveValue('');
+  });
+
+  it('restores the original check date when availability is changed back, unless a date was chosen manually', async () => {
+    const user = userEvent.setup();
+    restoreDraft({ availabilityLastReviewedOn: '2026-10-01' });
+    render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.selectOptions(field('availability'), 'No');
+    expect(field('availabilityLastReviewedOn')).toHaveValue(today());
+    await user.selectOptions(field('availability'), 'Yes');
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-10-01');
+    fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-09-30' } });
+    await user.selectOptions(field('availability'), 'No');
+    expect(field('availabilityLastReviewedOn')).toHaveValue('2026-09-30');
+    expect(screen.getByText('This replaces a more recent review date. Check that you are correcting the recorded date.')).toHaveAttribute('role', 'status');
   });
 
   it('allows clearing construction status, restores that choice and keeps a newly selected review date', async () => {
@@ -408,7 +437,7 @@ describe('WarehouseForm — availability and readiness', () => {
     expect(screen.getByText('Enter a complete, valid date')).toBeInTheDocument();
     fireEvent.change(field('availability'), { target: { value: 'No' } });
     expect(field('availabilityLastReviewedOn')).not.toBe(previousInput);
-    expect(field('availabilityLastReviewedOn')).toHaveValue('');
+    expect(field('availabilityLastReviewedOn')).toHaveValue(today());
     expect(screen.queryByText('Enter a complete, valid date')).toBeNull();
     await user.click(screen.getByRole('button', { name: /^next$/i }));
     expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
