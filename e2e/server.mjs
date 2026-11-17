@@ -42,6 +42,7 @@ export async function startServer() {
   const ErrorHandler = backend('./src/middleware/errorHandler');
   const { verifyScoutToken, clearScoutCache } = backend('./src/middleware/scoutMiddleware');
   const createAuditMiddleware = backend('./src/middleware/auditMiddleware');
+  const { resolveFormLocation, validateNewWarehouseForm } = backend('./src/middleware/warehouseFormValidation');
   const settings = new SettingsService(new AppSettingModel(prisma));
   const warehouseService = new WarehouseService(new WarehouseModel(prisma));
   const stagingService = new StagingService(new StagedWarehouseModel(prisma), warehouseService, settings);
@@ -101,7 +102,8 @@ export async function startServer() {
       return task;
     } }));
     // Real Scout authentication, validator, controller, service, and database.
-    app.post('/api/warehouses/scout', verifyScoutToken, Validation.validateWarehouseCreate, warehouses.createScoutWarehouse);
+    app.post('/api/warehouses/scout/resolve-location', verifyScoutToken, resolveFormLocation);
+    app.post('/api/warehouses/scout', verifyScoutToken, validateNewWarehouseForm, Validation.validateWarehouseCreate, warehouses.createScoutWarehouse);
     // The reviewer is a fixture identity; Google sign-in and role assignment are outside this suite.
     app.use('/api/staging', (req, _res, next) => {
       req.user = { email: 'reviewer@example.test', name: 'E2E reviewer', isAdmin: true };

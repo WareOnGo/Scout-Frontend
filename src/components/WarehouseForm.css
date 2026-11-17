@@ -832,3 +832,15 @@ textarea.form-input {
 .warehouse-form-modal.is-mobile .combobox-list {
   max-height: 200px;
 }
+
+/* Structured fields follow the original form's desktop and touch sizes. */
+.warehouse-form-modal {
+  --structured-control-height: 40px;
+  --structured-control-font-size: 15px;
+  --structured-control-padding: 8px 12px;
+}
+.warehouse-form-modal.is-mobile {
+  --structured-control-height: 48px;
+  --structured-control-font-size: 16px;
+  --structured-control-padding: 12px 14px;
+}

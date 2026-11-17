@@ -19,6 +19,7 @@ const required = {
   listing_type: 'Rent', warehouseType: 'PEB', address: 'E2E locality', city: 'New Delhi', state: 'Delhi',
   contactPerson: 'E2E owner', contactNumber: '9999999999', uploadedBy: 'E2ESCOUT',
   compliances: 'CLU and Fire NOC confirmed', totalSpaceSqft: [10000], ratePerSqft: '25',
+  landType: 'Warehouse CLU', googleLocation: 'https://maps.app.goo.gl/ttMpsPTNwLcrdHas5',
 };
 
 test.beforeAll(async () => {
@@ -34,6 +35,7 @@ test.beforeEach(async ({ page, hasTouch }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.e2eErrors = errors;
+  page.on('request', request => { if (request.url().includes('/resolve-location')) errors.push('Unexpected Maps verification request'); });
 });
 test.afterEach(async ({ page }) => { expect(page.e2eErrors).toEqual([]); });
 
@@ -54,6 +56,8 @@ async function fillFreshForm(page) {
   await field(page, 'state').fill('Delhi');
   await page.locator('.combobox-option').filter({ hasText: /^Delhi$/ }).click();
   await expect(field(page, 'city')).toHaveValue('New Delhi');
+  await field(page, 'landType').selectOption(required.landType);
+  await field(page, 'googleLocation').fill(required.googleLocation);
   await next(page);
   await field(page, 'warehouseType').selectOption('PEB');
   await field(page, 'totalSpaceSqft').fill('10000');
@@ -106,7 +110,7 @@ async function verifyStored(request, receipt, expected, autoApproved = false) {
   expect(await server.prisma.warehouseData.count({ where: { warehouseId } })).toBe(1);
   const saved = await request.get(`${server.url}/api/warehouses/${warehouseId}`);
   expect(saved.ok()).toBe(true);
-  const jsonValues = Object.fromEntries(Object.entries(dbValues).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
+  const jsonValues = Object.fromEntries(Object.entries(dbValues).filter(([key]) => key !== 'contactNumber').map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
   expect(await saved.json()).toMatchObject(jsonValues);
   // A retry cannot publish a duplicate master warehouse.
   expect((await request.post(`${server.url}/api/staging/${id}/approve`)).status()).toBe(409);
@@ -172,6 +176,15 @@ test('an older draft with all new optional fields absent still submits', async (
     handoverType: 'FIXED', handoverDate: null, handoverLeadValue: null, handoverLeadUnit: null, lockInDate: null });
 });
 
+test('an older open client can submit without the newly required fields during rollout', async ({ request }) => {
+  const legacy = { ...required, warehouseData: {} };
+  delete legacy.landType;
+  delete legacy.googleLocation;
+  const response = await request.post(`${server.url}/api/warehouses/scout`, { data: legacy });
+  expect(response.status()).toBe(201);
+  await verifyStored(request, await response.json(), { googleLocation: null });
+});
+
 test('invalid lead times and review dates are blocked before any submission request', async ({ page }) => {
   await restore(page);
   const posts = [];
@@ -219,14 +232,17 @@ test('a restored final-step draft revalidates hidden readiness values', async ({
 });
 
 test('failed Scout authentication preserves the draft and succeeds after correction', async ({ page, request }) => {
-  await restore(page, { uploadedBy: 'INVALID', availability: 'Yes', availabilityLastReviewedOn: '2025-01-10' });
+  await restore(page, { uploadedBy: 'INVALID', availability: 'Yes', availabilityLastReviewedOn: '2025-01-10' }, 1);
   const count = await server.prisma.stagedWarehouse.count();
   while (await page.getByRole('button', { name: /^Next$/ }).isVisible()) await next(page);
-  const failed = page.waitForResponse(response => response.url().endsWith('/warehouses/scout'));
-  await page.getByRole('button', { name: 'Create Warehouse', exact: true }).click();
+  const button = page.getByRole('button', { name: 'Create Warehouse', exact: true });
+  await expect(button).toBeEnabled();
+  const failed = page.waitForResponse(response => response.url().endsWith('/warehouses/scout') && response.request().method() === 'POST');
+  await button.click();
   expect((await failed).status()).toBe(401);
+  await expect(button).toBeEnabled();
   expect(await server.prisma.stagedWarehouse.count()).toBe(count);
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).values.availabilityLastReviewedOn, draftKey)).toBe('2025-01-10');
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key))?.values?.availabilityLastReviewedOn, draftKey)).toBe('2025-01-10');
   while (await page.getByRole('button', { name: /^Previous$/ }).isVisible()) await page.getByRole('button', { name: /^Previous$/ }).click();
   await field(page, 'uploadedBy').fill('E2ESCOUT');
   await verifyStored(request, await submit(page), { availability: 'Yes', availabilityLastReviewedOn: '2025-01-10' });
@@ -267,7 +283,7 @@ test('the API rejects invalid readiness data even if client validation is bypass
     { status: 'Invented status' }, { handoverDate: 'not-a-date' },
   ]) {
     const response = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: {}, availability: 'Yes', ...invalid },
+      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', ...invalid },
     });
     const body = await response.json();
     expect(response.status(), JSON.stringify(body)).toBe(400);
@@ -366,6 +382,8 @@ test.describe('adversarial availability', () => {
     await page.getByPlaceholder('Enter locality').fill(required.address);
     await field(page, 'state').fill('Delhi');
     await page.locator('.combobox-option').filter({ hasText: /^Delhi$/ }).click();
+    await field(page, 'landType').selectOption(required.landType);
+    await field(page, 'googleLocation').fill(required.googleLocation);
     await next(page);
     await field(page, 'warehouseType').selectOption('PEB');
     await next(page);
@@ -484,7 +502,7 @@ test.describe('adversarial availability', () => {
     // A valid control proves the request fixture itself can reach persistence.
     // Otherwise a missing required field could make every negative case pass.
     const control = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: {}, availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
+      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
         handoverDate: '2028-02-29', lockInDate: '2028-02-29' },
     });
     const receipt = await control.json();
@@ -496,7 +514,7 @@ test.describe('adversarial availability', () => {
       for (const value of ['2025-02-29', '2025-02-30', '0000-01-01', false, 0, '']) {
         await test.step(`${key}: ${JSON.stringify(value)}`, async () => {
           const response = await request.post(`${server.url}/api/warehouses/scout`, {
-            data: { ...required, warehouseData: {}, availability: 'Yes', [key]: value },
+            data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', [key]: value },
           });
           const body = await response.json();
           expect.soft(response.status(), `${key}=${JSON.stringify(value)}: ${JSON.stringify(body)}`).toBe(400);
@@ -505,9 +523,88 @@ test.describe('adversarial availability', () => {
       }
     }
     const blankAvailability = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: {}, availability: '   ', availabilityLastReviewedOn: '2024-02-29' },
+      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: '   ', availabilityLastReviewedOn: '2024-02-29' },
     });
     expect.soft(blankAvailability.status()).toBe(400);
     expect(await server.prisma.stagedWarehouse.count()).toBe(count);
   });
 });
+
+for (const width of [320, 390, 1280]) {
+  test.describe(`structured fields at ${width}px`, () => {
+    test.use({ viewport: { width, height: 850 }, isMobile: width < 768, hasTouch: width < 768 });
+    test('all new inputs survive mobile entry, draft reload, API staging and approval', async ({ page, request }) => {
+      await fillFreshForm(page);
+      await pressButton(page, page.getByRole('button', { name: 'Go to Owner Details' }));
+      await page.getByLabel('Contact Number country code', { exact: true }).selectOption('DK');
+      await field(page, 'contactNumber').fill('32123456');
+      await page.getByLabel('Alternate Phone Number country code', { exact: true }).selectOption('GB');
+      await field(page, 'alt_phone_number').fill('02079460123');
+      await next(page);
+      await field(page, 'landType').selectOption('Agricultural CLU');
+      await field(page, 'distance_from_highway').fill('0');
+      await field(page, 'approachRoadWidth').fill('50');
+      await page.getByLabel('Approach Road Width unit', { exact: true }).selectOption('metres');
+      await next(page);
+      const heightInput = field(page, 'clearHeightFt');
+      await heightInput.pressSequentially('50x');
+      await expect(heightInput).toBeFocused();
+      await expect(heightInput).toHaveAttribute('aria-invalid', 'true');
+      await expect(page.getByRole('alert')).toHaveText('Use digits and at most one decimal point (e.g. 50.5).');
+      await page.screenshot({ path: test.info().outputPath(`measurement-warning-${width}.png`) });
+      await heightInput.press('Backspace');
+      await expect(heightInput).toHaveValue('50');
+      await expect(heightInput).toHaveAttribute('aria-invalid', 'false');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      const measurements = [
+        ['land_parcel_size', 'Land Parcel Size', 'hectares'], ['builtup_area', 'Built-up Area', 'sq m'],
+        ['carpet_area', 'Carpet Area', 'sq ft'], ['clearHeightFt', 'Clear Height', 'metres'],
+        ['centreHeight', 'Centre Height', 'feet'], ['plinthHeightFt', 'Plinth Height', 'feet'],
+        ['dockApronLengthFt', 'Dock Apron Length', 'metres'], ['gateSizeFt', 'Compound Gate Width', 'feet'],
+        ['powerKva', 'Power', 'HP'],
+      ];
+      for (const [key, label, unit] of measurements) {
+        await field(page, key).fill('50.5');
+        await page.getByLabel(`${label} unit`, { exact: true }).selectOption(unit);
+        expect((await field(page, key).boundingBox()).height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40);
+      }
+      await field(page, 'dimensions').fill('100');
+      await field(page, 'dimensions-1').fill('60');
+      await field(page, 'dimensions-2').fill('30');
+      await field(page, 'dockDimension').fill('8');
+      await field(page, 'dockDimension-1').fill('10');
+      await field(page, 'floorStrengthPerSqm').fill('5');
+      await field(page, 'lightingDetails').fill('200');
+      await page.getByLabel('Male washrooms', { exact: true }).fill('0');
+      await page.getByLabel('Female washrooms', { exact: true }).fill('3');
+      await field(page, 'canopyType').selectOption('Running');
+      await field(page, 'dockPlatformType').selectOption('Angled/Cross');
+      await field(page, 'flooringType').selectOption('VDF or Trimix');
+      await page.getByLabel('Ventilation Type options').click();
+      await page.getByRole('checkbox', { name: 'Ridge', exact: true }).check();
+      await page.getByRole('checkbox', { name: 'Turbo', exact: true }).check();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+      await field(page, 'dimensions').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: test.info().outputPath(`structured-fields-${width}.png`), fullPage: true });
+      await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key))?.values?.washroom_count?.female, draftKey)).toBe('3');
+      await page.reload();
+      await expect(field(page, 'clearHeightFt')).toHaveValue('50.5');
+      await expect(page.getByLabel('Clear Height unit', { exact: true })).toHaveValue('metres');
+      const receipt = await submit(page);
+      await verifyStored(request, receipt, {
+        contactNumber: '+4532123456', alt_phone_number: '+442079460123',
+        land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq m', carpet_area: '50.5 sq ft',
+        clearHeightFt: '50.5 metres', centreHeight: '50.5 feet', plinthHeightFt: '50.5 feet',
+        dockDimension: '8 x 10 feet', dockApronLengthFt: '50.5 metres', gateSizeFt: '50.5 feet',
+        floorStrengthPerSqm: '5 tonnes/sq m', lightingDetails: '200 lux', distance_from_highway: '0 km',
+        washroom_count: 'Male: 0; Female: 3', canopyType: 'Running', dockPlatformType: 'Angled/Cross',
+        flooringType: 'VDF or Trimix', ventilationType: 'Ridge, Turbo',
+      });
+      const staged = await server.prisma.stagedWarehouse.findUniqueOrThrow({ where: { id: receipt.submissionId } });
+      expect(staged).toMatchObject({ powerKva: '50.5 HP', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres',
+        landType: 'Agricultural CLU', latitude: null, longitude: null });
+      expect(await server.prisma.warehouseData.findUnique({ where: { warehouseId: staged.warehouseId } }))
+        .toMatchObject({ powerKva: '50.5 HP', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres', landType: 'Agricultural CLU' });
+    });
+  });
+}

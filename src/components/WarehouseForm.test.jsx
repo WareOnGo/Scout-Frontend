@@ -132,7 +132,7 @@ describe('WarehouseForm — draft persistence', () => {
     expect(document.querySelector('[data-field="contactPerson"]').value).toBe('');
   });
 
-  it('DRAFT-2: with a valid stored draft, the banner appears and values restore', () => {
+  it('DRAFT-2: with a valid stored draft, the banner appears and values restore', async () => {
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({
@@ -147,7 +147,7 @@ describe('WarehouseForm — draft persistence', () => {
         savedAt: Date.now(),
       })
     );
-    render(<WarehouseForm visible={true} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await act(async () => { render(<WarehouseForm visible={true} onSubmit={vi.fn()} onCancel={vi.fn()} />); });
     expect(screen.getByText(/Restored unsaved draft/i)).toBeInTheDocument();
     expect(document.querySelector('[data-field="contactPerson"]').value).toBe('Restored Person');
   });
@@ -189,8 +189,8 @@ describe('WarehouseForm — draft persistence', () => {
 });
 
 describe('WarehouseForm — SelectInput (current) preservation', () => {
-  it('SEL-3: off-list value is rendered as "<value> (current)" and stays selected', () => {
-    render(
+  it('SEL-3: off-list value is rendered as "<value> (current)" and stays selected', async () => {
+    await act(async () => { render(
       <WarehouseForm
         visible={true}
         initialData={{
@@ -202,7 +202,7 @@ describe('WarehouseForm — SelectInput (current) preservation', () => {
         onSubmit={vi.fn()}
         onCancel={vi.fn()}
       />
-    );
+    ); });
 
     const select = document.querySelector('[data-field="warehouseType"]');
     expect(select.value).toBe('Tin Shed');
@@ -219,6 +219,7 @@ describe('WarehouseForm — availability and readiness', () => {
     city: 'Bangalore', state: 'Karnataka', contactPerson: 'Test Owner',
     contactNumber: '9999999999', uploadedBy: 'TEST', compliances: 'CLU', ratePerSqft: '25',
     totalSpaceSqft: [10000], availability: 'Yes',
+    landType: 'Warehouse CLU', googleLocation: 'https://www.google.com/maps?q=12.9,77.6',
   };
   const field = name => document.querySelector(`[data-field="${name}"]`);
   const today = () => new Intl.DateTimeFormat('en-CA', {
@@ -230,6 +231,7 @@ describe('WarehouseForm — availability and readiness', () => {
     }));
   };
   const submitForm = async (user, onSubmit, buttonName = /Create Warehouse/i) => {
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Go to Scout Notes' }));
     const button = screen.getByRole('button', { name: buttonName });
     await waitFor(() => expect(button).toBeEnabled());
@@ -490,7 +492,7 @@ describe('WarehouseForm — availability and readiness', () => {
       expect(screen.getByText('Review date cannot be in the future')).toBeInTheDocument();
       fireEvent.change(field('availabilityLastReviewedOn'), { target: { value: '2026-10-25' } });
       fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
-      expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled());
     } finally {
       vi.useRealTimers();
     }
