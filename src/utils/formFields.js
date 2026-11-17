@@ -19,7 +19,7 @@ export const MEASUREMENTS = {
 export const LAND_TYPES = ['Warehouse CLU', 'Commercial CLU', 'Industrial CLU', 'Agricultural CLU', 'Residential CLU', 'Others'];
 export const CANOPY_TYPES = ['Running', 'Shutter', 'None'];
 export const DOCK_PLATFORM_TYPES = ['None', 'Extended', 'Running', 'Angled/Cross', 'Inward'];
-export const FLOORING_TYPES = ['Tiles', 'Conventional Concrete', 'VDF or Trimix', 'FM2', 'Kota Stone', 'Others', 'Not Known'];
+export const FLOORING_TYPES = ['Tiles', 'Conventional Concrete', 'VDF', 'FM2', 'Kota Stone', 'Others', 'Not Known'];
 export const VENTILATION_TYPES = ['Ridge', 'Turbo', 'Side Louvres', 'Window', 'None', 'Not Known'];
 
 const aliases = {

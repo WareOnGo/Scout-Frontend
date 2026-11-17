@@ -55,7 +55,7 @@ describe('Scout structured form', () => {
     change(screen.getByLabelText('Female washrooms'), '3');
     change(field('canopyType'), 'Running');
     change(field('dockPlatformType'), 'Inward');
-    change(field('flooringType'), 'FM2');
+    change(field('flooringType'), 'VDF');
     fireEvent.click(screen.getByLabelText('Ventilation Type options'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Ridge' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Turbo' }));
@@ -64,7 +64,7 @@ describe('Scout structured form', () => {
       clearHeightFt: '50.5 metres', builtup_area: '50.5 sq ft', land_parcel_size: '50.5 sq ft',
       dockDimension: '50.5 x 20 metres', lightingDetails: '50.5 lux', floorStrengthPerSqm: '50.5 tonnes/sq m',
       washroom_count: 'Male: 0; Female: 3', ventilationType: 'Ridge, Turbo', canopyType: 'Running',
-      dockPlatformType: 'Inward', flooringType: 'FM2', setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station',
+      dockPlatformType: 'Inward', flooringType: 'VDF', setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station',
       warehouseData: { powerKva: '50.5 HP', dimensions: '50.5 x 20 x 20 metres', approachRoadWidth: '50.5 metres' } });
     expect(JSON.stringify(payload)).not.toContain('"kind"');
     expect(localStorage.getItem(key)).toBeNull();

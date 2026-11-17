@@ -581,7 +581,7 @@ for (const width of [320, 390, 1280]) {
       await page.getByLabel('Female washrooms', { exact: true }).fill('3');
       await field(page, 'canopyType').selectOption('Running');
       await field(page, 'dockPlatformType').selectOption('Angled/Cross');
-      await field(page, 'flooringType').selectOption('VDF or Trimix');
+      await field(page, 'flooringType').selectOption('VDF');
       await page.getByLabel('Ventilation Type options').click();
       await page.getByRole('checkbox', { name: 'Ridge', exact: true }).check();
       await page.getByRole('checkbox', { name: 'Turbo', exact: true }).check();
@@ -600,7 +600,7 @@ for (const width of [320, 390, 1280]) {
         dockDimension: '8 x 10 feet', dockApronLengthFt: '50.5 metres', gateSizeFt: '50.5 feet',
         floorStrengthPerSqm: '5 tonnes/sq m', lightingDetails: '200 lux', distance_from_highway: '0 km',
         washroom_count: 'Male: 0; Female: 3', canopyType: 'Running', dockPlatformType: 'Angled/Cross',
-        flooringType: 'VDF or Trimix', ventilationType: 'Ridge, Turbo',
+        flooringType: 'VDF', ventilationType: 'Ridge, Turbo',
       });
       const staged = await server.prisma.stagedWarehouse.findUniqueOrThrow({ where: { id: receipt.submissionId } });
       expect(staged).toMatchObject({ powerKva: '50.5 HP', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres',
