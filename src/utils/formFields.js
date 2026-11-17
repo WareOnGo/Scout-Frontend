@@ -2,9 +2,9 @@ const LENGTH = ['feet', 'metres'];
 export const MEASUREMENTS = {
   distance_from_highway: { label: 'Distance from Highway', units: ['km', 'metres'], zero: true, step: 1 },
   approachRoadWidth: { label: 'Approach Road Width', units: LENGTH, bareUnit: 'feet', step: 1 },
-  land_parcel_size: { label: 'Land Parcel Size', units: ['acres', 'hectares', 'sq ft', 'sq m'] },
-  builtup_area: { label: 'Built-up Area', units: ['sq ft', 'sq m'] },
-  carpet_area: { label: 'Carpet Area', units: ['sq ft', 'sq m'] },
+  land_parcel_size: { label: 'Land Parcel Size', units: ['acres', 'hectares', 'sq ft'], legacyUnits: ['sq m'] },
+  builtup_area: { label: 'Built-up Area', units: ['sq ft'], legacyUnits: ['sq m'] },
+  carpet_area: { label: 'Carpet Area', units: ['sq ft'], legacyUnits: ['sq m'] },
   dimensions: { label: 'Dimensions', units: LENGTH, parts: ['Length', 'Width', 'Height'] },
   clearHeightFt: { label: 'Clear Height', units: LENGTH, bareUnit: 'feet', hint: 'Side height of the warehouse.' },
   centreHeight: { label: 'Centre Height', units: LENGTH },
@@ -38,13 +38,16 @@ export function measurementState(value, key) {
   const config = MEASUREMENTS[key];
   const count = config.parts?.length || 1;
   if (value?.kind === 'measurement' && Array.isArray(value.parts) && value.parts.length === count
-    && value.parts.every(part => typeof part === 'string') && typeof value.unit === 'string') return value;
+    && value.parts.every(part => typeof part === 'string') && typeof value.unit === 'string') {
+    // Retired units stay readable in saved drafts without relabelling the number.
+    return config.legacyUnits?.includes(value.unit) ? { ...value, legacy: true } : value;
+  }
   const raw = rawString(value);
   const state = { kind: 'measurement', raw, parts: Array(count).fill(''), unit: config.units[0], edited: false, legacy: false };
   if (!raw.trim()) return state;
   let numberText = raw.trim();
   let unit = '';
-  for (const candidate of config.units) {
+  for (const candidate of [...config.units, ...(config.legacyUnits || [])]) {
     const alias = aliases[candidate].find(a => numberText.toLowerCase().endsWith(a));
     if (alias) { unit = candidate; numberText = numberText.slice(0, -alias.length).trim(); break; }
   }
@@ -52,7 +55,7 @@ export function measurementState(value, key) {
   // Only strip valid digit grouping; never turn a decimal comma into a different number.
   const parsed = parts.map(part => /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(part) ? part.replace(/,/g, '') : part);
   if (parsed.length !== count || parsed.some(part => !numeric.test(part))) return { ...state, legacy: true };
-  return { ...state, parts: parsed, unit: unit || config.bareUnit || '' };
+  return { ...state, parts: parsed, unit: unit || config.bareUnit || '', legacy: Boolean(config.legacyUnits?.includes(unit)) };
 }
 
 export function measurementError(value, key) {
@@ -65,7 +68,7 @@ export function measurementError(value, key) {
     || (config.zero ? Number(part) < 0 : Number(part) <= 0))) {
     return config.zero ? 'Enter a number of zero or more.' : 'Enter a number greater than zero.';
   }
-  if (!config.units.includes(state.unit)) return 'Select a unit.';
+  if (!config.units.includes(state.unit) && !config.legacyUnits?.includes(state.unit)) return 'Select a unit.';
   return null;
 }
 

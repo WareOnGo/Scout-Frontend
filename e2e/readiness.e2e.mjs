@@ -557,7 +557,7 @@ for (const width of [320, 390, 1280]) {
       await expect(heightInput).toHaveAttribute('aria-invalid', 'false');
       await expect(page.getByRole('alert')).toHaveCount(0);
       const measurements = [
-        ['land_parcel_size', 'Land Parcel Size', 'hectares'], ['builtup_area', 'Built-up Area', 'sq m'],
+        ['land_parcel_size', 'Land Parcel Size', 'hectares'], ['builtup_area', 'Built-up Area', 'sq ft'],
         ['carpet_area', 'Carpet Area', 'sq ft'], ['clearHeightFt', 'Clear Height', 'metres'],
         ['centreHeight', 'Centre Height', 'feet'], ['plinthHeightFt', 'Plinth Height', 'feet'],
         ['dockApronLengthFt', 'Dock Apron Length', 'metres'], ['gateSizeFt', 'Compound Gate Width', 'feet'],
@@ -565,7 +565,9 @@ for (const width of [320, 390, 1280]) {
       ];
       for (const [key, label, unit] of measurements) {
         await field(page, key).fill('50.5');
-        await page.getByLabel(`${label} unit`, { exact: true }).selectOption(unit);
+        if (['builtup_area', 'carpet_area'].includes(key)) {
+          await expect(field(page, key).locator('..').locator('..').locator('.measurement-suffix')).toHaveText('sq ft');
+        } else await page.getByLabel(`${label} unit`, { exact: true }).selectOption(unit);
         expect((await field(page, key).boundingBox()).height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40);
       }
       await field(page, 'dimensions').fill('100');
@@ -593,7 +595,7 @@ for (const width of [320, 390, 1280]) {
       const receipt = await submit(page);
       await verifyStored(request, receipt, {
         contactNumber: '+4532123456', alt_phone_number: '+442079460123',
-        land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq m', carpet_area: '50.5 sq ft',
+        land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq ft', carpet_area: '50.5 sq ft',
         clearHeightFt: '50.5 metres', centreHeight: '50.5 feet', plinthHeightFt: '50.5 feet',
         dockDimension: '8 x 10 feet', dockApronLengthFt: '50.5 metres', gateSizeFt: '50.5 feet',
         floorStrengthPerSqm: '5 tonnes/sq m', lightingDetails: '200 lux', distance_from_highway: '0 km',

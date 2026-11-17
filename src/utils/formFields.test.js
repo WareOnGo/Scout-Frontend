@@ -22,6 +22,18 @@ describe('measurement contract', () => {
     expect(measurementState('1,5 m', 'approachRoadWidth').legacy).toBe(true);
     expect(measurementState('8 × 10 ft', 'dockDimension')).toMatchObject({ parts: ['8', '10'], unit: 'feet' });
   });
+  it.each(['land_parcel_size', 'builtup_area', 'carpet_area'])('preserves retired square-metre values and drafts for %s', key => {
+    for (const raw of ['120 sq m', '120 sqm', '120 m²']) {
+      const state = measurementState(raw, key);
+      expect(state.legacy).toBe(true);
+      expect(serializeMeasurement(state, key)).toBe(raw);
+    }
+    const draft = { kind: 'measurement', raw: '', parts: ['120.5'], unit: 'sq m', edited: true, legacy: false };
+    const restored = measurementState(draft, key);
+    expect(restored).toMatchObject({ parts: ['120.5'], unit: 'sq m', legacy: true });
+    expect(serializeMeasurement(restored, key)).toBe('120.5 sq m');
+    expect(measurementError({ ...draft, parts: ['120x'] }, key)).toBeTruthy();
+  });
   it('distinguishes zero from blank and rejects malformed or partial input', () => {
     const state = { ...measurementState('', 'distance_from_highway'), edited: true };
     expect(serializeMeasurement(state, 'distance_from_highway')).toBeNull();

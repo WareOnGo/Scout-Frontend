@@ -36,7 +36,7 @@ export function MeasurementField({ field, value, onChange, error }) {
   const displayedError = inputError || error;
   const update = patch => onChange({ ...state, ...patch, edited: true, legacy: false });
   return <FieldGroup label={config.label} error={displayedError} hint={config.hint} descriptionId={descriptionId}>
-    {state.legacy ? <ExistingValue value={state.raw} field={field}
+    {state.legacy ? <ExistingValue value={state.edited ? `${state.parts.join(' x ')} ${state.unit}`.trim() : state.raw} field={field}
       onReplace={() => update({ parts: labels.map(() => ''), unit: config.units[0] })} /> : (
       <div className={`measurement-inputs${config.parts ? ' measurement-inputs--dimensions' : ''}`} data-parts={config.parts?.length}>
         {labels.map((label, index) => <label key={label} className="structured-part">
@@ -50,7 +50,7 @@ export function MeasurementField({ field, value, onChange, error }) {
         </label>)}
         <label className="structured-part structured-unit">
           {config.parts && <span>Unit</span>}
-          {config.units.length === 1 ? <span className="measurement-suffix">{config.units[0]}</span>
+          {config.units.length === 1 && state.unit === config.units[0] ? <span className="measurement-suffix">{config.units[0]}</span>
             : <select className="form-input" aria-label={`${config.label} unit`} value={state.unit}
               onChange={event => update({ unit: event.target.value })}>
               <option value="" disabled>Select unit</option>

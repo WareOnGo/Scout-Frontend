@@ -15,6 +15,34 @@ function Measurement({ field = 'clearHeightFt', initial = '' }) {
   return <MeasurementField field={field} value={value} onChange={setValue} />;
 }
 
+describe('retired area units', () => {
+  it.each([['builtup_area', 'Built-up Area'], ['carpet_area', 'Carpet Area'], ['land_parcel_size', 'Land Parcel Size']])(
+    'preserves %s in square metres until explicitly replaced', (field, label) => {
+      render(<Measurement field={field} initial="120 sqm" />);
+      expect(screen.getByText('120 sqm')).toBeVisible();
+      expect(screen.queryByLabelText(`${label} value`)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Replace value' }));
+      expect(screen.getByLabelText(`${label} value`)).toHaveValue('');
+      expect(screen.queryByRole('option', { name: 'sq m', exact: true })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Keep original value' }));
+      expect(screen.getByText('120 sqm')).toBeVisible();
+    },
+  );
+  it('does not label a saved square-metre draft as square feet', () => {
+    render(<Measurement field="builtup_area" initial={{ kind: 'measurement', raw: '', parts: ['120.5'], unit: 'sq m', edited: true, legacy: false }} />);
+    expect(screen.getByText('120.5 sq m')).toBeVisible();
+    expect(screen.queryByText('sq ft', { exact: true })).toBeNull();
+  });
+  it('requires an explicit unit for a previously unitless area', () => {
+    render(<Measurement field="builtup_area" initial="120" />);
+    expect(screen.getByLabelText('Built-up Area value')).toHaveValue('120');
+    expect(screen.getByLabelText('Built-up Area unit')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Built-up Area unit'), { target: { value: 'sq ft' } });
+    expect(screen.getByText('sq ft', { exact: true })).toBeVisible();
+    expect(screen.getByLabelText('Built-up Area value')).toHaveValue('120');
+  });
+});
+
 describe('immediate measurement feedback', () => {
   it('warns while typing and clears the warning as soon as the character is corrected', async () => {
     const user = userEvent.setup();

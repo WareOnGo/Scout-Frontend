@@ -61,7 +61,7 @@ describe('Scout structured form', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Turbo' }));
     const payload = await submit(onSubmit);
     expect(payload).toMatchObject({ contactNumber: '+442079460123', alt_phone_number: '+12025550123',
-      clearHeightFt: '50.5 metres', builtup_area: '50.5 sq m', land_parcel_size: '50.5 sq m',
+      clearHeightFt: '50.5 metres', builtup_area: '50.5 sq ft', land_parcel_size: '50.5 sq ft',
       dockDimension: '50.5 x 20 metres', lightingDetails: '50.5 lux', floorStrengthPerSqm: '50.5 tonnes/sq m',
       washroom_count: 'Male: 0; Female: 3', ventilationType: 'Ridge, Turbo', canopyType: 'Running',
       dockPlatformType: 'Inward', flooringType: 'FM2', setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station',
@@ -90,10 +90,10 @@ describe('Scout structured form', () => {
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} initialData={{ ...required,
       googleLocation: '', warehouseData: { landType: '', approachRoadWidth: '40-50 ft' },
       clearHeightFt: '30–40 ft', lightingDetails: 'LED', washroom_count: '5', ventilationType: 'Custom vents',
-      builtup_area: '50000', canopyType: 'Old canopy', uploadedBy: 'Existing scout' }} />);
+      builtup_area: '50000', carpet_area: '120 sqm', land_parcel_size: '400 m²', canopyType: 'Old canopy', uploadedBy: 'Existing scout' }} />);
     const payload = await submit(onSubmit);
     expect(payload).toMatchObject({ clearHeightFt: '30–40 ft', lightingDetails: 'LED', washroom_count: '5',
-      ventilationType: 'Custom vents', builtup_area: '50000', canopyType: 'Old canopy', uploadedBy: 'Existing scout',
+      ventilationType: 'Custom vents', builtup_area: '50000', carpet_area: '120 sqm', land_parcel_size: '400 m²', canopyType: 'Old canopy', uploadedBy: 'Existing scout',
       googleLocation: null, warehouseData: { landType: null, approachRoadWidth: '40-50 ft' } });
   });
 
