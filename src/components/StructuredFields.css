@@ -7,6 +7,9 @@
 .phone-inputs { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; }
 .structured-field .form-input { min-height: var(--structured-control-height, 48px); font-size: var(--structured-control-font-size, 16px); }
 .measurement-inputs .form-input[aria-invalid="true"] { border-color: var(--error-color, var(--text-danger, #ff4d4f)); }
+.measurement-inputs .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
+.power-requirement { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 4px; font-size: 14px; cursor: pointer; }
+.power-requirement input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent-primary); }
 .measurement-suffix { display: flex; align-items: center; height: 100%; min-height: var(--structured-control-height, 48px); padding: var(--structured-control-padding, 10px 12px); padding-inline: 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; font-size: var(--structured-control-font-size, 16px); white-space: nowrap; }
 .measurement-inputs:not(.measurement-inputs--dimensions) > .structured-part:first-child .form-input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .measurement-inputs:not(.measurement-inputs--dimensions) > .structured-unit :is(.form-input, .measurement-suffix) { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; }

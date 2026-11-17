@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MEASUREMENTS, measurementState, measurementError, serializeMeasurement, hydrateMeasurements,
-  serializeMeasurements, washroomState, washroomError, serializeWashrooms, ventilationState, toggleVentilation, serializeVentilation } from './formFields';
+  serializeMeasurements, washroomState, washroomError, serializeWashrooms, ventilationState, toggleVentilation, serializeVentilation, setPowerRequirement } from './formFields';
 import { phoneState, phoneError, serializePhone, normalizePhoneInput, PHONE_COUNTRIES } from './phone';
 
 describe('measurement contract', () => {
@@ -49,6 +49,41 @@ describe('measurement contract', () => {
     const hydrated = hydrateMeasurements(old);
     expect(hydrateMeasurements(JSON.parse(JSON.stringify(hydrated)))).toEqual(hydrated);
     expect(serializeMeasurements(hydrated)).toMatchObject(old);
+  });
+});
+
+describe('power as per requirement', () => {
+  it.each(['100 HP', '50 kVA', '0', 'Available on request', ''])('preserves %s when temporarily toggled', raw => {
+    const selected = setPowerRequirement(measurementState(raw, 'powerKva'), true);
+    expect(measurementError(selected, 'powerKva')).toBeNull();
+    expect(serializeMeasurement(selected, 'powerKva')).toBe('As per requirement');
+    expect(serializeMeasurement(setPowerRequirement(selected, false), 'powerKva')).toBe(raw || null);
+  });
+  it('restores entered power after a selected draft is saved and reloaded', () => {
+    const entered = { ...measurementState('', 'powerKva'), parts: ['75.5'], unit: 'HP', edited: true };
+    const draft = JSON.parse(JSON.stringify(setPowerRequirement(entered, true)));
+    expect(serializeMeasurement(measurementState(draft, 'powerKva'), 'powerKva')).toBe('As per requirement');
+    expect(serializeMeasurement(setPowerRequirement(draft, false), 'powerKva')).toBe('75.5 HP');
+  });
+  it('recognizes saved text and old drafts, and keeps an unchecked saved value cleared after reload', () => {
+    const raw = ' as PER requirement ';
+    const oldDraft = { kind: 'measurement', raw, parts: [''], unit: 'kVA', edited: false, legacy: true };
+    for (const value of [raw, oldDraft]) {
+      const state = measurementState(value, 'powerKva');
+      expect(state).toMatchObject({ asPerRequirement: true, legacy: false });
+      expect(serializeMeasurement(state, 'powerKva')).toBe(raw);
+      const cleared = JSON.parse(JSON.stringify(setPowerRequirement(state, false)));
+      expect(measurementState(cleared, 'powerKva').asPerRequirement).toBe(false);
+      expect(serializeMeasurement(cleared, 'powerKva')).toBeNull();
+    }
+  });
+  it('skips only the disabled power magnitude and resumes validation when unticked', () => {
+    const invalid = { ...measurementState('', 'powerKva'), parts: ['50x'], edited: true };
+    const selected = setPowerRequirement(invalid, true);
+    expect(measurementError(selected, 'powerKva')).toBeNull();
+    expect(serializeMeasurement(selected, 'powerKva')).toBe('As per requirement');
+    expect(measurementError(setPowerRequirement(selected, false), 'powerKva')).toBeTruthy();
+    expect(measurementError(selected, 'clearHeightFt')).toBeTruthy();
   });
 });
 

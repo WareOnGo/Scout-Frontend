@@ -33,18 +33,23 @@ const aliases = {
 const numeric = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 const cleanNumber = v => String(v).trim().replace(/^0+(?=\d)/, '').replace(/^(\.)/, '0$1').replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 const rawString = value => value == null ? '' : String(value);
+const isPowerRequirement = value => /^as\s+per\s+requirement$/i.test(rawString(value).trim());
 
 export function measurementState(value, key) {
   const config = MEASUREMENTS[key];
   const count = config.parts?.length || 1;
   if (value?.kind === 'measurement' && Array.isArray(value.parts) && value.parts.length === count
     && value.parts.every(part => typeof part === 'string') && typeof value.unit === 'string') {
+    if (key === 'powerKva' && !value.edited && value.asPerRequirement == null && isPowerRequirement(value.raw)) {
+      return { ...value, asPerRequirement: true, legacy: false };
+    }
     // Retired units stay readable in saved drafts without relabelling the number.
     return config.legacyUnits?.includes(value.unit) ? { ...value, legacy: true } : value;
   }
   const raw = rawString(value);
   const state = { kind: 'measurement', raw, parts: Array(count).fill(''), unit: config.units[0], edited: false, legacy: false };
   if (!raw.trim()) return state;
+  if (key === 'powerKva' && isPowerRequirement(raw)) return { ...state, asPerRequirement: true };
   let numberText = raw.trim();
   let unit = '';
   for (const candidate of [...config.units, ...(config.legacyUnits || [])]) {
@@ -60,6 +65,7 @@ export function measurementState(value, key) {
 
 export function measurementError(value, key) {
   const state = measurementState(value, key);
+  if (key === 'powerKva' && state.asPerRequirement === true) return null;
   if (!state.edited && state.raw.trim()) return null;
   const config = MEASUREMENTS[key];
   if (state.parts.every(part => !part.trim())) return null;
@@ -74,10 +80,20 @@ export function measurementError(value, key) {
 
 export function serializeMeasurement(value, key) {
   const state = measurementState(value, key);
+  if (key === 'powerKva' && state.asPerRequirement === true) {
+    return !state.edited && isPowerRequirement(state.raw) ? state.raw : 'As per requirement';
+  }
   if (!state.edited) return state.raw || null;
   const error = measurementError(state, key);
   if (error) throw new Error(`${MEASUREMENTS[key].label}: ${error}`);
   return state.parts.every(part => !part.trim()) ? null : `${state.parts.map(cleanNumber).join(' x ')} ${state.unit}`;
+}
+
+export function setPowerRequirement(value, checked) {
+  const state = measurementState(value, 'powerKva');
+  // Preserve the current number/unit (or legacy text) when toggling temporarily.
+  // Unticking an existing requirement value clears it rather than resaving its raw text.
+  return { ...state, asPerRequirement: checked, edited: state.edited || (!checked && isPowerRequirement(state.raw)) };
 }
 
 export function washroomState(value) {

@@ -71,6 +71,22 @@ describe('Scout structured form', () => {
     expect(screen.queryByText('Nearest Bus Transport')).toBeNull();
   }, 30000);
 
+  it('restores a checked power draft and submits the existing Power string field', async () => {
+    draft({ powerKva: '125 HP' });
+    const onSubmit = vi.fn().mockResolvedValue({});
+    const view = render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.click(document.querySelector('.power-requirement input'));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values.powerKva.asPerRequirement).toBe(true));
+    view.unmount();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(document.querySelector('.power-requirement input')).toBeChecked();
+    expect(field('powerKva')).toBeDisabled();
+    expect(field('powerKva')).toHaveValue('125');
+    const payload = await submit(onSubmit);
+    expect(payload.warehouseData.powerKva).toBe('As per requirement');
+    expect(JSON.stringify(payload)).not.toContain('asPerRequirement');
+  }, 15000);
+
   it('blocks new submissions missing land/location and invalid partial dimensions', async () => {
     draft({ landType: '', googleLocation: '' }, 1);
     render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);

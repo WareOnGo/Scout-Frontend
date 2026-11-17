@@ -15,6 +15,59 @@ function Measurement({ field = 'clearHeightFt', initial = '' }) {
   return <MeasurementField field={field} value={value} onChange={setValue} />;
 }
 
+describe('power as per requirement', () => {
+  it('supports keyboard toggling and restores the entered magnitude and unit', async () => {
+    const user = userEvent.setup();
+    render(<Measurement field="powerKva" initial="125 HP" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'As per requirement' });
+    checkbox.focus();
+    await user.keyboard(' ');
+    expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText('Power value')).toBeDisabled();
+    expect(screen.getByLabelText('Power unit')).toBeDisabled();
+    await user.keyboard(' ');
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByLabelText('Power value')).toBeEnabled();
+    expect(screen.getByLabelText('Power value')).toHaveValue('125');
+    expect(screen.getByLabelText('Power unit')).toHaveValue('HP');
+  });
+  it('reopens saved requirements checked and allows restoring the original after unticking', () => {
+    render(<Measurement field="powerKva" initial="As per requirement" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'As per requirement' });
+    expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText('Power value')).toBeDisabled();
+    fireEvent.click(checkbox);
+    expect(screen.getByLabelText('Power value')).toBeEnabled();
+    expect(screen.getByLabelText('Power value')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep original value' }));
+    expect(checkbox).toBeChecked();
+  });
+  it('hides numeric warnings only while the power inputs are disabled', () => {
+    render(<Measurement field="powerKva" />);
+    fireEvent.change(screen.getByLabelText('Power value'), { target: { value: '50x' } });
+    expect(screen.getByRole('alert')).toBeVisible();
+    const checkbox = screen.getByRole('checkbox', { name: 'As per requirement' });
+    fireEvent.click(checkbox);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByLabelText('Power value')).toHaveAttribute('aria-invalid', 'false');
+    fireEvent.click(checkbox);
+    expect(screen.getByLabelText('Power value')).toHaveValue('50x');
+    expect(screen.getByRole('alert')).toBeVisible();
+  });
+  it('preserves a legacy description after the checkbox is unticked', () => {
+    render(<Measurement field="powerKva" initial="Available on request" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'As per requirement' });
+    fireEvent.click(checkbox);
+    expect(screen.getByLabelText('Power value')).toBeDisabled();
+    fireEvent.click(checkbox);
+    expect(screen.getByText('Available on request')).toBeVisible();
+  });
+  it('does not add this option to other measurements', () => {
+    render(<Measurement field="clearHeightFt" />);
+    expect(screen.queryByRole('checkbox', { name: 'As per requirement' })).toBeNull();
+  });
+});
+
 describe('retired area units', () => {
   it.each([['builtup_area', 'Built-up Area'], ['carpet_area', 'Carpet Area'], ['land_parcel_size', 'Land Parcel Size']])(
     'preserves %s in square metres until explicitly replaced', (field, label) => {

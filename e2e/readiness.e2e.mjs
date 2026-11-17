@@ -570,6 +570,17 @@ for (const width of [320, 390, 1280]) {
         } else await page.getByLabel(`${label} unit`, { exact: true }).selectOption(unit);
         expect((await field(page, key).boundingBox()).height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40);
       }
+      const powerOption = page.getByRole('checkbox', { name: 'As per requirement' });
+      await powerOption.check();
+      await expect(field(page, 'powerKva')).toBeDisabled();
+      await expect(page.getByLabel('Power unit', { exact: true })).toBeDisabled();
+      await powerOption.uncheck();
+      await expect(field(page, 'powerKva')).toHaveValue('50.5');
+      await expect(page.getByLabel('Power unit', { exact: true })).toHaveValue('HP');
+      await powerOption.check();
+      await powerOption.scrollIntoViewIfNeeded();
+      expect((await powerOption.locator('..').boundingBox()).height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: test.info().outputPath(`power-requirement-${width}.png`) });
       await field(page, 'dimensions').fill('100');
       await field(page, 'dimensions-1').fill('60');
       await field(page, 'dimensions-2').fill('30');
@@ -592,6 +603,9 @@ for (const width of [320, 390, 1280]) {
       await page.reload();
       await expect(field(page, 'clearHeightFt')).toHaveValue('50.5');
       await expect(page.getByLabel('Clear Height unit', { exact: true })).toHaveValue('metres');
+      await expect(powerOption).toBeChecked();
+      await expect(field(page, 'powerKva')).toBeDisabled();
+      await expect(field(page, 'powerKva')).toHaveValue('50.5');
       const receipt = await submit(page);
       await verifyStored(request, receipt, {
         contactNumber: '+4532123456', alt_phone_number: '+442079460123',
@@ -603,10 +617,10 @@ for (const width of [320, 390, 1280]) {
         flooringType: 'VDF', ventilationType: 'Ridge, Turbo',
       });
       const staged = await server.prisma.stagedWarehouse.findUniqueOrThrow({ where: { id: receipt.submissionId } });
-      expect(staged).toMatchObject({ powerKva: '50.5 HP', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres',
+      expect(staged).toMatchObject({ powerKva: 'As per requirement', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres',
         landType: 'Agricultural CLU', latitude: null, longitude: null });
       expect(await server.prisma.warehouseData.findUnique({ where: { warehouseId: staged.warehouseId } }))
-        .toMatchObject({ powerKva: '50.5 HP', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres', landType: 'Agricultural CLU' });
+        .toMatchObject({ powerKva: 'As per requirement', dimensions: '100 x 60 x 30 feet', approachRoadWidth: '50 metres', landType: 'Agricultural CLU' });
     });
   });
 }
