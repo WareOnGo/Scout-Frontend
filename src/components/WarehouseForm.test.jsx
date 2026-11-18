@@ -11,6 +11,7 @@ vi.mock('../services/warehouseService', () => ({
 }));
 
 import WarehouseForm from './WarehouseForm';
+import { completePptForm } from '../test/pptFormFixture';
 
 const DRAFT_KEY = 'warehouseForm:draft:v1';
 
@@ -227,7 +228,7 @@ describe('WarehouseForm — availability and readiness', () => {
   }).format(new Date());
   const restoreDraft = (values = {}, currentStep = 4) => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      values: { ...validValues, ...values }, currentStep, savedAt: Date.now(),
+      version: 3, values: { ...completePptForm(), ...completePptForm().warehouseData, handoverType: 'Fixed', handoverLeadUnit: 'Weeks', ...validValues, ...values }, currentStep, savedAt: Date.now(),
     }));
   };
   const submitForm = async (user, onSubmit, buttonName = /Create Warehouse/i) => {
@@ -327,15 +328,17 @@ describe('WarehouseForm — availability and readiness', () => {
     });
   });
 
-  it('starts a new variable handover without an assumed unit and keeps it saveable', async () => {
+  it('requires a unit for a new variable handover', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({});
-    restoreDraft({ handoverType: 'Variable', handoverLeadValue: '2' });
+    restoreDraft({ handoverType: 'Variable', handoverLeadValue: '2', handoverLeadUnit: '' });
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
     expect(field('handoverLeadUnit')).toHaveValue('');
-    expect(await submitForm(user, onSubmit)).toMatchObject({
-      handoverType: 'VARIABLE', handoverLeadValue: 2, handoverLeadUnit: null,
-    });
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByText('Select a handover lead-time unit.')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.selectOptions(field('handoverLeadUnit'), 'Days');
+    expect(await submitForm(user, onSubmit)).toMatchObject({ handoverType: 'VARIABLE', handoverLeadValue: 2, handoverLeadUnit: 'DAYS' });
   });
 
   it.each(['0', '-1', '1.5', '121'])('blocks invalid lead time %s before leaving Commercials', async value => {
@@ -498,12 +501,11 @@ describe('WarehouseForm — availability and readiness', () => {
     }
   });
 
-  it('keeps readiness optional for existing drafts without the new fields', async () => {
+  it('keeps missing readiness on existing warehouse records', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({});
-    restoreDraft();
-    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
-    expect(await submitForm(user, onSubmit)).toMatchObject({
+    render(<WarehouseForm visible initialData={validValues} onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(await submitForm(user, onSubmit, /Update Warehouse/i)).toMatchObject({
       availabilityLastReviewedOn: null, handoverType: 'FIXED', handoverDate: null,
       handoverLeadValue: null, handoverLeadUnit: null, lockInDate: null, status: null,
     });

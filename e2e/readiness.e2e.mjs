@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { startServer } from './server.mjs';
+import { completePptForm } from '../src/test/pptFormFixture.js';
 
 let server;
 const draftKey = 'warehouseForm:draft:v1';
@@ -21,6 +22,8 @@ const required = {
   compliances: 'CLU and Fire NOC confirmed', totalSpaceSqft: [10000], ratePerSqft: '25',
   landType: 'Warehouse CLU', googleLocation: 'https://maps.app.goo.gl/ttMpsPTNwLcrdHas5',
 };
+const apiValues = () => ({ ...completePptForm(), ...required,
+  warehouseData: { ...completePptForm().warehouseData, landType: required.landType } });
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
@@ -42,11 +45,24 @@ test.afterEach(async ({ page }) => { expect(page.e2eErrors).toEqual([]); });
 async function restore(page, values = {}, currentStep = 4) {
   await page.goto(server.url);
   await page.evaluate(({ key, values, currentStep }) => {
-    localStorage.setItem(key, JSON.stringify({ currentStep, values }));
-  }, { key: draftKey, values: { ...required, ...values }, currentStep });
+    localStorage.setItem(key, JSON.stringify({ version: 3, currentStep, values }));
+  }, { key: draftKey, values: { ...completePptForm(), ...completePptForm().warehouseData, ...required, handoverType: 'Fixed', handoverLeadUnit: 'Weeks', ...values }, currentStep });
   await page.reload();
 }
 
+async function fillPptTechnical(page) {
+  for (const [key, value] of [['clearHeightFt', '30'], ['floorStrengthPerSqm', '5'], ['numberOfDocks', '0'], ['plinthHeightFt', '0'], ['powerKva', '100']]) await field(page, key).fill(value);
+  await field(page, 'flooringType').selectOption('VDF');
+  await field(page, 'canopyType').selectOption('None');
+  await page.getByLabel('Ventilation Type options').click();
+  await page.getByRole('checkbox', { name: 'None', exact: true }).check();
+  await page.getByLabel('Male washrooms', { exact: true }).fill('0');
+  await page.getByLabel('Female washrooms', { exact: true }).fill('0');
+}
+async function fillPptFire(page) {
+  await field(page, 'fireNocAvailable').selectOption('No');
+  await field(page, 'fireSafetyMeasures').fill('None');
+}
 async function fillFreshForm(page) {
   await page.goto(server.url);
   await field(page, 'listing_type').selectOption('Rent');
@@ -61,10 +77,13 @@ async function fillFreshForm(page) {
   await next(page);
   await field(page, 'warehouseType').selectOption('PEB');
   await field(page, 'totalSpaceSqft').fill('10000');
+  await fillPptTechnical(page);
   await next(page);
   await page.getByPlaceholder('Please only mention conversion-related and Fire NOC-related status.').fill(required.compliances);
+  await fillPptFire(page);
   await next(page);
   await field(page, 'ratePerSqft').fill('25');
+  await field(page, 'handoverDate').fill('2027-02-28');
 }
 
 async function submit(page) {
@@ -144,7 +163,10 @@ for (const [unit, value] of [['Days', 1], ['Weeks', 2], ['Months', 120]]) {
     await field(page, 'handoverType').selectOption('Fixed');
     await expect(field(page, 'handoverDate')).toHaveValue('2027-02-28');
     await field(page, 'handoverType').selectOption('Variable');
-    await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)).values.handoverLeadUnit, draftKey)).toBe(unit);
+    await expect.poll(() => page.evaluate(key => {
+      const { handoverType, handoverLeadValue, handoverLeadUnit } = JSON.parse(localStorage.getItem(key)).values;
+      return { handoverType, handoverLeadValue, handoverLeadUnit };
+    }, draftKey)).toEqual({ handoverType: 'Variable', handoverLeadValue: String(value), handoverLeadUnit: unit });
     await page.reload();
     await expect(field(page, 'handoverLeadValue')).toHaveValue(String(value));
     await expect(field(page, 'handoverLeadUnit')).toHaveValue(unit);
@@ -170,19 +192,33 @@ test('availability suggests today and cleared construction status stays cleared 
   await verifyStored(request, await submit(page), { availability: 'No', availabilityLastReviewedOn: today, status: null });
 });
 
-test('an older draft with all new optional fields absent still submits', async ({ page, request }) => {
-  await restore(page);
-  await verifyStored(request, await submit(page), { availabilityLastReviewedOn: null, status: null,
-    handoverType: 'FIXED', handoverDate: null, handoverLeadValue: null, handoverLeadUnit: null, lockInDate: null });
+test('an older draft must supply handover before creating a new warehouse', async ({ page }) => {
+  await restore(page, { handoverDate: '', handoverLeadUnit: '' });
+  const count = await server.prisma.stagedWarehouse.count();
+  await next(page);
+  await expect(field(page, 'handoverDate')).toHaveAttribute('aria-invalid', 'true');
+  expect(await server.prisma.stagedWarehouse.count()).toBe(count);
 });
 
-test('an older open client can submit without the newly required fields during rollout', async ({ request }) => {
-  const legacy = { ...required, warehouseData: {} };
-  delete legacy.landType;
-  delete legacy.googleLocation;
-  const response = await request.post(`${server.url}/api/warehouses/scout`, { data: legacy });
-  expect(response.status()).toBe(201);
-  await verifyStored(request, await response.json(), { googleLocation: null });
+for (const [key, step] of [['clearHeightFt', 2], ['floorStrengthPerSqm', 2], ['numberOfDocks', 2], ['plinthHeightFt', 2],
+  ['flooringType', 2], ['canopyType', 2], ['ventilationType', 2], ['powerKva', 2], ['washroom_count', 2],
+  ['fireNocAvailable', 3], ['fireSafetyMeasures', 3]]) {
+  test(`missing ${key} stops its Scout step before a submission reaches the API`, async ({ page }) => {
+    await restore(page, { [key]: key === 'fireNocAvailable' ? null : '' }, step);
+    const count = await server.prisma.stagedWarehouse.count();
+    await next(page);
+    await expect(field(page, key)).toHaveAttribute('aria-invalid', 'true');
+    expect(await server.prisma.stagedWarehouse.count()).toBe(count);
+  });
+}
+
+test('a final-step draft with missing PPT specifications returns to the required field', async ({ page }) => {
+  await restore(page, { clearHeightFt: '' }, 6);
+  const count = await server.prisma.stagedWarehouse.count();
+  await page.getByRole('button', { name: 'Create Warehouse', exact: true }).click();
+  await expect(field(page, 'clearHeightFt')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('heading', { name: 'Warehouse Technical Specifications', exact: true })).toBeVisible();
+  expect(await server.prisma.stagedWarehouse.count()).toBe(count);
 });
 
 test('invalid lead times and review dates are blocked before any submission request', async ({ page }) => {
@@ -211,6 +247,7 @@ for (const key of ['availabilityLastReviewedOn', 'handoverDate', 'lockInDate', '
     await restore(page, { availability: 'Yes' });
     if (key === 'handoverLeadValue') await field(page, 'handoverType').selectOption('Variable');
     const input = field(page, key);
+    await input.fill('');
     await input.focus();
     await input.pressSequentially(key === 'handoverLeadValue' ? 'e' : '10');
     expect(await input.evaluate(node => node.validity.badInput)).toBe(true);
@@ -278,12 +315,12 @@ test('a database write failure retains every readiness value and can be retried'
 test('the API rejects invalid readiness data even if client validation is bypassed', async ({ request }) => {
   const count = await server.prisma.stagedWarehouse.count();
   for (const invalid of [
-    { handoverType: 'VARIABLE', handoverLeadValue: 121 }, { handoverLeadUnit: 'YEARS' },
+    { handoverType: 'VARIABLE', handoverLeadValue: 121, handoverLeadUnit: 'WEEKS' }, { handoverLeadUnit: 'YEARS' },
     { availabilityLastReviewedOn: '2999-01-01' }, { availabilityLastReviewedOn: '2025-02-30' },
     { status: 'Invented status' }, { handoverDate: 'not-a-date' },
   ]) {
     const response = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', ...invalid },
+      data: { ...apiValues(), availability: 'Yes', ...invalid },
     });
     const body = await response.json();
     expect(response.status(), JSON.stringify(body)).toBe(400);
@@ -386,8 +423,10 @@ test.describe('adversarial availability', () => {
     await field(page, 'googleLocation').fill(required.googleLocation);
     await next(page);
     await field(page, 'warehouseType').selectOption('PEB');
+    await fillPptTechnical(page);
     await next(page);
     await page.getByPlaceholder('Please only mention conversion-related and Fire NOC-related status.').fill(required.compliances);
+    await fillPptFire(page);
     await next(page);
     await expect(field(page, 'availability')).toHaveValue('');
     await expect(field(page, 'handoverType')).toHaveValue('Fixed');
@@ -415,10 +454,13 @@ test.describe('adversarial availability', () => {
   });
 
   for (const [label, lead, unit] of [['number only', '2', ''], ['unit only', '', 'Weeks']]) {
-    test(`optional Variable ${label} is stored without inventing the missing answer`, async ({ page, request }) => {
+    test(`incomplete Variable ${label} is blocked without inventing the missing answer`, async ({ page }) => {
       await restore(page, { handoverType: 'Variable', handoverLeadValue: lead, handoverLeadUnit: unit });
-      await verifyStored(request, await submit(page), { handoverType: 'VARIABLE',
-        handoverLeadValue: lead ? Number(lead) : null, handoverLeadUnit: unit ? unit.toUpperCase() : null });
+      const count = await server.prisma.stagedWarehouse.count();
+      await next(page);
+      await expect(page.getByRole('heading', { name: 'Commercials', exact: true })).toBeVisible();
+      await expect(page.getByText(lead ? 'Select a handover lead-time unit.' : 'Enter a handover lead time between 1 and 120.', { exact: true })).toBeVisible();
+      expect(await server.prisma.stagedWarehouse.count()).toBe(count);
     });
   }
 
@@ -502,7 +544,7 @@ test.describe('adversarial availability', () => {
     // A valid control proves the request fixture itself can reach persistence.
     // Otherwise a missing required field could make every negative case pass.
     const control = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
+      data: { ...apiValues(), availability: 'Yes', availabilityLastReviewedOn: '2024-02-29',
         handoverDate: '2028-02-29', lockInDate: '2028-02-29' },
     });
     const receipt = await control.json();
@@ -514,7 +556,7 @@ test.describe('adversarial availability', () => {
       for (const value of ['2025-02-29', '2025-02-30', '0000-01-01', false, 0, '']) {
         await test.step(`${key}: ${JSON.stringify(value)}`, async () => {
           const response = await request.post(`${server.url}/api/warehouses/scout`, {
-            data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: 'Yes', [key]: value },
+            data: { ...apiValues(), availability: 'Yes', [key]: value },
           });
           const body = await response.json();
           expect.soft(response.status(), `${key}=${JSON.stringify(value)}: ${JSON.stringify(body)}`).toBe(400);
@@ -523,7 +565,7 @@ test.describe('adversarial availability', () => {
       }
     }
     const blankAvailability = await request.post(`${server.url}/api/warehouses/scout`, {
-      data: { ...required, warehouseData: { landType: 'Warehouse CLU' }, availability: '   ', availabilityLastReviewedOn: '2024-02-29' },
+      data: { ...apiValues(), availability: '   ', availabilityLastReviewedOn: '2024-02-29' },
     });
     expect.soft(blankAvailability.status()).toBe(400);
     expect(await server.prisma.stagedWarehouse.count()).toBe(count);
@@ -547,6 +589,7 @@ for (const width of [320, 390, 1280]) {
       await page.getByLabel('Approach Road Width unit', { exact: true }).selectOption('metres');
       await next(page);
       const heightInput = field(page, 'clearHeightFt');
+      await heightInput.fill('');
       await heightInput.pressSequentially('50x');
       await expect(heightInput).toBeFocused();
       await expect(heightInput).toHaveAttribute('aria-invalid', 'true');

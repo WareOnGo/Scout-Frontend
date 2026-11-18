@@ -24,7 +24,7 @@ function ExistingValue({ value, field, onReplace }) {
   </div>;
 }
 
-export function MeasurementField({ field, value, onChange, error }) {
+export function MeasurementField({ field, value, onChange, error, required }) {
   const descriptionId = useId();
   const config = MEASUREMENTS[field];
   const state = measurementState(value, field);
@@ -36,14 +36,14 @@ export function MeasurementField({ field, value, onChange, error }) {
     ? 'Use digits and at most one decimal point (e.g. 50.5).' : null;
   const displayedError = asPerRequirement ? null : inputError || error;
   const update = patch => onChange({ ...state, ...patch, edited: true, legacy: false });
-  return <FieldGroup label={config.label} error={displayedError} hint={config.hint} descriptionId={descriptionId}>
+  return <FieldGroup label={config.label} required={required} error={displayedError} hint={config.hint} descriptionId={descriptionId}>
     {state.legacy && !asPerRequirement ? <ExistingValue value={state.edited ? `${state.parts.join(' x ')} ${state.unit}`.trim() : state.raw} field={field}
       onReplace={() => update({ parts: labels.map(() => ''), unit: config.units[0] })} /> : (
       <div className={`measurement-inputs${config.parts ? ' measurement-inputs--dimensions' : ''}`} data-parts={config.parts?.length}>
         {labels.map((label, index) => <label key={label} className="structured-part">
           {config.parts && <span>{label}</span>}
           <input className="form-input" type="text" inputMode="decimal" autoComplete="off"
-            aria-label={`${config.label} ${label.toLowerCase()}`} aria-invalid={!asPerRequirement && (invalidParts[index] || Boolean(error))}
+            aria-label={`${config.label} ${label.toLowerCase()}`} aria-required={required || undefined} aria-invalid={!asPerRequirement && (invalidParts[index] || Boolean(error))}
             disabled={asPerRequirement}
             aria-describedby={displayedError || config.hint ? descriptionId : undefined}
             data-field={index === 0 ? field : `${field}-${index}`} value={state.parts[index]}
@@ -101,9 +101,9 @@ export function PhoneField({ field, label, value, onChange, error, required }) {
   </FieldGroup>;
 }
 
-export function WashroomField({ value, onChange, error }) {
+export function WashroomField({ value, onChange, error, required }) {
   const state = washroomState(value);
-  return <FieldGroup label="Washroom Count" error={error} hint="Leave an unknown count blank. Enter 0 only if there are none.">
+  return <FieldGroup label="Washroom Count" required={required} error={error} hint="Enter at least one known count when required. Enter 0 only if there are none.">
     {state.legacy ? <ExistingValue value={state.raw} field="washroom_count"
       onReplace={() => onChange({ ...state, legacy: false, edited: true })} />
       : <div className="washroom-inputs">{['male', 'female'].map((key, i) => <label key={key} className="structured-part">
@@ -118,7 +118,7 @@ export function WashroomField({ value, onChange, error }) {
   </FieldGroup>;
 }
 
-export function VentilationField({ value, onChange }) {
+export function VentilationField({ value, onChange, error, required }) {
   const state = ventilationState(value);
   const dropdown = useRef(null);
   useEffect(() => {
@@ -128,7 +128,7 @@ export function VentilationField({ value, onChange }) {
     document.addEventListener('pointerdown', closeOutside);
     return () => document.removeEventListener('pointerdown', closeOutside);
   }, []);
-  return <FieldGroup label="Ventilation Type" hint="Select all that apply.">
+  return <FieldGroup label="Ventilation Type" required={required} error={error} hint="Select all that apply.">
     {state.legacy ? <ExistingValue value={state.raw} field="ventilationType"
       onReplace={() => onChange({ ...state, choices: [], edited: true, legacy: false })} />
       : <details className="ventilation-select" ref={dropdown} onKeyDown={event => {
@@ -138,7 +138,7 @@ export function VentilationField({ value, onChange }) {
           dropdown.current.querySelector('summary').focus();
         }
       }}>
-        <summary className="form-input" aria-label="Ventilation Type options">
+        <summary className="form-input" data-field="ventilationType" aria-invalid={Boolean(error)} aria-label="Ventilation Type options">
           <span>{state.choices.length ? state.choices.join(', ') : 'Select ventilation types'}</span>
         </summary>
         <div className="ventilation-options">{VENTILATION_TYPES.map(option => <label key={option}

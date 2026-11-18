@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 vi.mock('../services/warehouseService', () => ({ warehouseService: { getPresignedUrl: vi.fn() } }));
 import WarehouseForm from './WarehouseForm';
 import { MEASUREMENTS } from '../utils/formFields';
+import { completePptForm } from '../test/pptFormFixture';
+const pptAnswers = { ...completePptForm(), ...completePptForm().warehouseData, handoverType: 'Fixed' };
 
 const key = 'warehouseForm:draft:v1';
 const required = { listing_type: 'Rent', warehouseType: 'PEB', address: 'Test locality', city: 'New Delhi', state: 'Delhi',
@@ -12,7 +14,7 @@ const required = { listing_type: 'Rent', warehouseType: 'PEB', address: 'Test lo
 const field = name => document.querySelector(`[data-field="${name}"]`);
 const change = (element, value) => fireEvent.change(element, { target: { value } });
 function draft(extra = {}, step = 2) {
-  localStorage.setItem(key, JSON.stringify({ values: { ...required, ...extra }, currentStep: step }));
+  localStorage.setItem(key, JSON.stringify({ version: 3, values: { ...pptAnswers, ...required, ...extra }, currentStep: step }));
 }
 async function submit(onSubmit) {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Go to Scout Notes' })).toBeEnabled());
@@ -39,7 +41,7 @@ describe('Scout structured form', () => {
   });
 
   it('sends every measurement, international contacts, dropdowns, dimensions and washrooms through the existing fields', async () => {
-    draft({ setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station' });
+    draft({ powerKva: '100 kVA', ventilationType: '', setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station' });
     const onSubmit = vi.fn().mockResolvedValue({});
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
     for (const [name, config] of Object.entries(MEASUREMENTS)) {
@@ -115,10 +117,11 @@ describe('Scout structured form', () => {
 
   it('migrates a saved draft, retains uploads and restores edited split values after reload', async () => {
     draft({ media: { images: ['https://example.test/photo.jpg'], videos: [], docs: [] }, clearHeightFt: '30 ft' });
+    const old = JSON.parse(localStorage.getItem(key)); old.version = 1; localStorage.setItem(key, JSON.stringify(old));
     const view = render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);
     change(field('clearHeightFt'), '12.5');
     change(screen.getByLabelText('Clear Height unit'), 'metres');
-    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).version).toBe(2));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).version).toBe(3));
     const saved = JSON.parse(localStorage.getItem(key));
     expect(saved.values.clearHeightFt).toMatchObject({ parts: ['12.5'], unit: 'metres', edited: true });
     expect(saved.values.media.images).toEqual(['https://example.test/photo.jpg']);

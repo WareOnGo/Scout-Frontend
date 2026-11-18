@@ -82,6 +82,7 @@ export async function startServer() {
       role text DEFAULT 'EMPLOYEE', "adminAccess" boolean DEFAULT false,
       "analystAccess" boolean DEFAULT false, "callDashboardAccess" boolean DEFAULT false,
       "dashboardAccess" boolean DEFAULT false, "reviewerAccess" boolean DEFAULT false)`);
+    await backend('./scripts/migrateWarehousePermissions').migrate(prisma, true);
     await prisma.$executeRawUnsafe(`CREATE TABLE app_setting (
       application text, key text, value jsonb NOT NULL, "updatedBy" text,
       "updatedAt" timestamp NOT NULL DEFAULT now(), PRIMARY KEY(application, key))`);
@@ -111,7 +112,10 @@ export async function startServer() {
     });
     app.get('/api/staging/:id', staging.getSubmission);
     app.post('/api/staging/:id/approve', staging.approveSubmission);
-    app.get('/api/warehouses/:id', warehouses.getWarehouseById);
+    app.get('/api/warehouses/:id', (req, _res, next) => {
+      req.user = { email: 'reviewer@example.test', name: 'E2E reviewer', isAdmin: true };
+      next();
+    }, warehouses.getWarehouseById);
     app.use('/api', ErrorHandler.handle);
     // Build the actual application. No Vite dev server or intercepted API responses.
     await build({ root: scoutRoot, configFile: false, envDir: buildDir,

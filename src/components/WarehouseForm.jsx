@@ -1,3 +1,5 @@
+import { pptFormErrors } from '../utils/pptFormValidation';
+import { pptFieldRequired, pptFormSnapshot } from '../utils/pptFormPolicy';
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import FileUpload from './FileUpload';
 import './WarehouseForm.css';
@@ -80,9 +82,9 @@ const INDIA_STATES = Object.keys(INDIA_STATE_CITIES).sort();
 const formSteps = [
   { title: 'Owner Details', fields: ['listing_type', 'contactPerson', 'contactNumber', 'alt_phone_number', 'uploadedBy'] },
   { title: 'Location Details', fields: ['address', 'city', 'state', 'googleLocation', 'landType', ...Object.keys(MEASUREMENTS).filter(key => MEASUREMENTS[key].step === 1)] },
-  { title: 'Technical Specs', fields: ['warehouseType', 'totalSpaceSqft', 'chargeableArea', 'washroom_count', ...Object.keys(MEASUREMENTS).filter(key => MEASUREMENTS[key].step !== 1)] },
-  { title: 'Compliances', fields: ['compliances'] },
-  { title: 'Commercials', fields: ['ratePerSqft', 'availabilityLastReviewedOn', 'handoverType', 'handoverDate', 'handoverLeadValue', 'lockInDate'] },
+  { title: 'Technical Specs', fields: ['warehouseType', 'totalSpaceSqft', 'chargeableArea', 'washroom_count', 'numberOfDocks', 'canopyType', 'flooringType', 'ventilationType', ...Object.keys(MEASUREMENTS).filter(key => MEASUREMENTS[key].step !== 1)] },
+  { title: 'Compliances', fields: ['compliances', 'fireNocAvailable', 'fireSafetyMeasures'] },
+  { title: 'Commercials', fields: ['ratePerSqft', 'availabilityLastReviewedOn', 'handoverType', 'handoverDate', 'handoverLeadValue', 'handoverLeadUnit', 'lockInDate'] },
   { title: 'Media', fields: [] },
   { title: 'Scout Notes', fields: [] },
 ];
@@ -96,7 +98,7 @@ const INITIAL_VALUES = {
   availabilityLastReviewedOn: '', status: '', lockInDate: '',
   handoverType: 'Fixed', handoverDate: '', handoverLeadValue: '', handoverLeadUnit: '',
   compliances: '', otherSpecifications: '',
-  fireNocAvailable: false,
+  fireNocAvailable: null,
   fireSafetyMeasures: '', landType: '', approachRoadWidth: '',
   powerKva: '', pollutionZone: '', vaastuCompliance: '',
   dimensions: '', parkingDockingSpace: '', photos: '', media: null,
@@ -129,7 +131,7 @@ const hydrateValues = values => ({ ...hydrateMeasurements(values), contactNumber
 /** Flatten initialData (including nested WarehouseData) into form shape */
 const toFormValues = (d) => {
   if (!d) return hydrateValues({ ...INITIAL_VALUES });
-  const wd = d.WarehouseData || d.warehouseData || {};
+  const wd = d.WarehouseData || d.warehouseData || d;
   return hydrateValues({
     warehouseOwnerType: d.warehouseOwnerType || '',
     warehouseType: d.warehouseType || '',
@@ -158,7 +160,7 @@ const toFormValues = (d) => {
     uploadedBy: d.uploadedBy || '',
     compliances: d.compliances || '',
     otherSpecifications: d.otherSpecifications || '',
-    fireNocAvailable: wd.fireNocAvailable === true || wd.fireNocAvailable === 'true',
+    fireNocAvailable: wd.fireNocAvailable == null ? null : wd.fireNocAvailable === true || wd.fireNocAvailable === 'true',
     fireSafetyMeasures: wd.fireSafetyMeasures || '',
     landType: wd.landType || '',
     approachRoadWidth: wd.approachRoadWidth ?? '',
@@ -312,7 +314,7 @@ const Field = ({ label, required, error, warning, children, style, tooltip, html
       </label>
     )}
     {children}
-    {error && <div className="form-error">{error}</div>}
+    {error && <div className="form-error" role="alert">{error}</div>}
     {!error && warning && <div className="form-warning">{warning}</div>}
   </div>
 );
@@ -504,6 +506,8 @@ const loadDraft = () => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || !parsed.values) return null;
+    // Earlier drafts defaulted unanswered Fire NOC to false. Ask explicitly.
+    if ((parsed.version || 1) < 3 && parsed.values.fireNocAvailable !== true) parsed.values.fireNocAvailable = null;
     return parsed;
   } catch {
     return null;
@@ -514,7 +518,7 @@ const saveDraft = (values, currentStep) => {
   try {
     localStorage.setItem(
       DRAFT_STORAGE_KEY,
-      JSON.stringify({ version: 2, values, currentStep, savedAt: Date.now() })
+      JSON.stringify({ version: 3, values, currentStep, savedAt: Date.now() })
     );
   } catch {
     // Quota exceeded or storage unavailable — drop the draft silently.
@@ -530,6 +534,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
   const readinessId = useId();
   const [availabilitySnapshot, setAvailabilitySnapshot] = useState(null);
   const reviewDateTouched = useRef(false);
+  const [formBaseline, setFormBaseline] = useState(null);
   const [values, setValues] = useState(() => toFormValues(null));
   const locationChanged = !initialData || (values.googleLocation || '').trim() !== (initialData.googleLocation || '').trim();
   const [errors, setErrors] = useState({});
@@ -592,6 +597,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       setIncompleteInputs({});
       setAvailabilitySnapshot(draft?.values || initialData);
       setInitialSnapshot(initialData);
+      setFormBaseline(pptFormSnapshot(initialData));
       setContactTouched(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -653,6 +659,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
     setValues(prev => ({ ...prev, state: val, city: autoCity }));
     setErrors(prev => ({ ...prev, state: null, city: null }));
   };
+
+  const pptRequired = key => pptFieldRequired(formBaseline || initialData, key);
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -738,6 +746,9 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
       }
     }
 
+    for (const [key, error] of Object.entries(pptFormErrors(values, formBaseline || initialData))) {
+      if (fields.includes(key)) e[key] ||= error;
+    }
     return e;
   };
 
@@ -823,6 +834,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         alt_phone_number: serializePhone(values.alt_phone_number, Boolean(initialData)),
       };
       const payload = {
+        ...(formBaseline && { expectedFormValues: formBaseline }),
         warehouseOwnerType: submissionValues.warehouseOwnerType || null,
         warehouseType: submissionValues.warehouseType,
         address: submissionValues.address,
@@ -833,7 +845,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         contactPerson: submissionValues.contactPerson,
         contactNumber: submissionValues.contactNumber,
         totalSpaceSqft: (submissionValues.totalSpaceSqft || []).filter(v => v != null && v > 0),
-        numberOfDocks: submissionValues.numberOfDocks ? String(submissionValues.numberOfDocks) : null,
+        numberOfDocks: submissionValues.numberOfDocks === '' || submissionValues.numberOfDocks == null ? null : String(submissionValues.numberOfDocks),
         clearHeightFt: submissionValues.clearHeightFt ? String(submissionValues.clearHeightFt) : null,
         compliances: submissionValues.compliances,
         otherSpecifications: submissionValues.otherSpecifications || null,
@@ -908,7 +920,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
         suitableFor: Array.isArray(submissionValues.suitableFor) ? submissionValues.suitableFor : [],
         warehouseData: {
           dimensions: submissionValues.dimensions || null,
-          fireNocAvailable: Boolean(submissionValues.fireNocAvailable),
+          fireNocAvailable: typeof submissionValues.fireNocAvailable === 'boolean' ? submissionValues.fireNocAvailable : null,
           fireSafetyMeasures: submissionValues.fireSafetyMeasures || null,
           landType: submissionValues.landType || null,
           approachRoadWidth: submissionValues.approachRoadWidth ? String(submissionValues.approachRoadWidth) : null,
@@ -1275,7 +1287,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(<>
                 {col(
-                  <MeasurementField field="clearHeightFt" value={values.clearHeightFt} onChange={set('clearHeightFt')} error={errors.clearHeightFt} />,
+                  <MeasurementField required={pptRequired('clearHeightFt')} field="clearHeightFt" value={values.clearHeightFt} onChange={set('clearHeightFt')} error={errors.clearHeightFt} />,
                   true)}
                 {col(
                   <MeasurementField field="centreHeight" value={values.centreHeight} onChange={set('centreHeight')} error={errors.centreHeight} />,
@@ -1284,11 +1296,11 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(<>
                 {col(
-                  <MeasurementField field="plinthHeightFt" value={values.plinthHeightFt} onChange={set('plinthHeightFt')} error={errors.plinthHeightFt} />,
+                  <MeasurementField required={pptRequired('plinthHeightFt')} field="plinthHeightFt" value={values.plinthHeightFt} onChange={set('plinthHeightFt')} error={errors.plinthHeightFt} />,
                   true)}
                 {col(
-                  <Field label="Number of Docks">
-                    <TextInput mobile={m} value={values.numberOfDocks} onChange={set('numberOfDocks')} placeholder="Number of docks" />
+                  <Field label="Number of Docks" required={pptRequired('numberOfDocks')} error={errors.numberOfDocks} htmlFor="scout-numberOfDocks">
+                    <TextInput data-field="numberOfDocks" aria-label="Number of Docks" aria-invalid={Boolean(errors.numberOfDocks)} id="scout-numberOfDocks" mobile={m} value={values.numberOfDocks} onChange={set('numberOfDocks')} placeholder="Number of docks" />
                   </Field>,
                   true)}
               </>)}
@@ -1298,8 +1310,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   <MeasurementField field="dockDimension" value={values.dockDimension} onChange={set('dockDimension')} error={errors.dockDimension} />,
                   true)}
                 {col(
-                  <Field label="Canopy Type">
-                    <SelectInput mobile={m} value={values.canopyType} onChange={set('canopyType')} options={CANOPY_TYPES} placeholder="Select an option" allowClear data-field="canopyType" />
+                  <Field label="Canopy Type" required={pptRequired('canopyType')} error={errors.canopyType} htmlFor="scout-canopyType">
+                    <SelectInput data-field="canopyType" aria-label="Canopy Type" aria-invalid={Boolean(errors.canopyType)} id="scout-canopyType" mobile={m} value={values.canopyType} onChange={set('canopyType')} options={CANOPY_TYPES} placeholder="Select an option" allowClear />
                   </Field>,
                   true)}
               </>)}
@@ -1340,18 +1352,18 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(<>
                 {col(
-                  <Field label="Flooring Type">
-                    <SelectInput mobile={m} value={values.flooringType} onChange={set('flooringType')} options={FLOORING_TYPES} placeholder="Select an option" allowClear data-field="flooringType" />
+                  <Field label="Flooring Type" required={pptRequired('flooringType')} error={errors.flooringType} htmlFor="scout-flooringType">
+                    <SelectInput data-field="flooringType" aria-label="Flooring Type" aria-invalid={Boolean(errors.flooringType)} id="scout-flooringType" mobile={m} value={values.flooringType} onChange={set('flooringType')} options={FLOORING_TYPES} placeholder="Select an option" allowClear />
                   </Field>,
                   true)}
                 {col(
-                  <MeasurementField field="floorStrengthPerSqm" value={values.floorStrengthPerSqm} onChange={set('floorStrengthPerSqm')} error={errors.floorStrengthPerSqm} />,
+                  <MeasurementField required={pptRequired('floorStrengthPerSqm')} field="floorStrengthPerSqm" value={values.floorStrengthPerSqm} onChange={set('floorStrengthPerSqm')} error={errors.floorStrengthPerSqm} />,
                   true)}
               </>)}
 
               {row(
                 col(
-                  <VentilationField value={values.ventilationType} onChange={set('ventilationType')} />,
+                  <VentilationField required={pptRequired('ventilationType')} error={errors.ventilationType} value={values.ventilationType} onChange={set('ventilationType')} />,
                   true)
               )}
 
@@ -1373,7 +1385,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   <MeasurementField field="lightingDetails" value={values.lightingDetails} onChange={set('lightingDetails')} error={errors.lightingDetails} />,
                   true)}
                 {col(
-                  <MeasurementField field="powerKva" value={values.powerKva} onChange={set('powerKva')} error={errors.powerKva} />,
+                  <MeasurementField required={pptRequired('powerKva')} field="powerKva" value={values.powerKva} onChange={set('powerKva')} error={errors.powerKva} />,
                   true)}
               </>)}
 
@@ -1391,7 +1403,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {row(<>
                 {col(
-                  <WashroomField value={values.washroom_count} onChange={set('washroom_count')} error={errors.washroom_count} />,
+                  <WashroomField required={pptRequired('washroom_count')} value={values.washroom_count} onChange={set('washroom_count')} error={errors.washroom_count} />,
                   true)}
                 {col(
                   <Field label="Security Features">
@@ -1420,16 +1432,19 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   </Field>,
                   true)}
                 {col(
-                  <Field label="Fire NOC Available">
-                    <ToggleSwitch checked={values.fireNocAvailable} onChange={set('fireNocAvailable')} />
+                  <Field label="Fire NOC Available" required={pptRequired('fireNocAvailable')} error={errors.fireNocAvailable} htmlFor="scout-fireNocAvailable">
+                    <SelectInput mobile={m} data-field="fireNocAvailable" aria-label="Fire NOC Available" aria-invalid={Boolean(errors.fireNocAvailable)} id="scout-fireNocAvailable"
+                      value={values.fireNocAvailable == null ? '' : values.fireNocAvailable ? 'Yes' : 'No'}
+                      onChange={value => set('fireNocAvailable')(value === '' ? null : value === 'Yes')}
+                      options={['Yes', 'No']} placeholder="Select Yes or No" allowClear />
                   </Field>,
                   true)}
               </>)}
 
               {row(
                 col(
-                  <Field label="Fire Safety Measures">
-                    <TextInput mobile={m} value={values.fireSafetyMeasures} onChange={set('fireSafetyMeasures')} placeholder="eg: Hydrants, Sprinklers etc" />
+                  <Field label="Fire Safety Measures" required={pptRequired('fireSafetyMeasures')} error={errors.fireSafetyMeasures} htmlFor="scout-fireSafetyMeasures">
+                    <TextInput data-field="fireSafetyMeasures" aria-label="Fire Safety Measures" aria-invalid={Boolean(errors.fireSafetyMeasures)} id="scout-fireSafetyMeasures" mobile={m} value={values.fireSafetyMeasures} onChange={set('fireSafetyMeasures')} placeholder="eg: Hydrants, Sprinklers etc" />
                   </Field>,
                   true)
               )}
@@ -1505,7 +1520,8 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   <Field label="Handover Type" htmlFor={readinessId + '-handover-type'} error={errors.handoverType}
                     tooltip="Fixed: a handover date. Variable: time needed after the letter of intent is signed.">
                     <SelectInput id={readinessId + '-handover-type'} value={values.handoverType} onChange={set('handoverType')}
-                      options={HANDOVER_TYPE_OPTIONS} placeholder="Select handover type" data-field="handoverType" />
+                      options={HANDOVER_TYPE_OPTIONS} placeholder="Select handover type" data-field="handoverType"
+                      aria-invalid={!!errors.handoverType} />
                     <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                       {values.handoverType === 'Variable'
                         ? 'Enter the time needed after the letter of intent is signed.'
@@ -1514,7 +1530,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   </Field>,
                   true)}
                 {values.handoverType !== 'Variable' && col(
-                  <Field label="Handover Date" htmlFor={readinessId + '-handover-date'} error={errors.handoverDate}>
+                  <Field label="Handover Date" required={pptRequired('handoverDate')} htmlFor={readinessId + '-handover-date'} error={errors.handoverDate}>
                     <TextInput id={readinessId + '-handover-date'} type="date" value={values.handoverDate}
                       onChange={set('handoverDate')} data-field="handoverDate"
                       onInput={trackInputValidity} onKeyUp={trackInputValidity} onBlur={trackInputValidity}
@@ -1525,7 +1541,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
 
               {values.handoverType === 'Variable' && row(<>
                 {col(
-                  <Field label="Handover Lead Time" htmlFor={readinessId + '-lead-value'} error={errors.handoverLeadValue}>
+                  <Field label="Handover Lead Time" required={pptRequired('handoverLeadValue')} htmlFor={readinessId + '-lead-value'} error={errors.handoverLeadValue}>
                     <TextInput id={readinessId + '-lead-value'} type="number" inputMode="numeric" min="1" max="120" step="1"
                       value={values.handoverLeadValue} onChange={set('handoverLeadValue')} placeholder="e.g. 2"
                       data-field="handoverLeadValue" onInput={trackInputValidity} onBlur={trackInputValidity}
@@ -1533,7 +1549,7 @@ const WarehouseForm = ({ visible, onCancel, onSubmit, initialData = null, loadin
                   </Field>,
                   true)}
                 {col(
-                  <Field label="Handover Lead-time Unit" htmlFor={readinessId + '-lead-unit'}>
+                  <Field label="Handover Lead-time Unit" required={pptRequired('handoverLeadUnit')} htmlFor={readinessId + '-lead-unit'} error={errors.handoverLeadUnit}>
                     <SelectInput id={readinessId + '-lead-unit'} value={values.handoverLeadUnit} onChange={set('handoverLeadUnit')}
                       options={HANDOVER_UNIT_OPTIONS} placeholder="Select unit" data-field="handoverLeadUnit" />
                   </Field>,
