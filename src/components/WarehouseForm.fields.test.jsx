@@ -66,7 +66,7 @@ describe('Scout structured form', () => {
     const onSubmit = vi.fn().mockResolvedValue({});
     render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
     for (const [name, config] of Object.entries(MEASUREMENTS)) {
-      change(field(name), '50.5');
+      change(field(name), ['plinthHeightFt', 'carpet_area'].includes(name) ? '0' : '50.5');
       for (let index = 1; index < (config.parts?.length || 1); index++) change(field(`${name}-${index}`), '20');
       if (config.units.length > 1) change(screen.getByLabelText(`${config.label} unit`), config.units.at(-1));
     }
@@ -85,6 +85,7 @@ describe('Scout structured form', () => {
     const payload = await submit(onSubmit);
     expect(payload).toMatchObject({ contactNumber: '+442079460123', alt_phone_number: '+12025550123',
       clearHeightFt: '50.5 metres', builtup_area: '50.5 sq ft', land_parcel_size: '50.5 sq ft',
+      plinthHeightFt: '0 metres', carpet_area: '0 sq ft',
       dockDimension: '50.5 x 20 metres', lightingDetails: '50.5 lux', floorStrengthPerSqm: '50.5 tonnes/sq m',
       washroom_count: 'Male: 0; Female: 3', ventilationType: 'Ridge, Turbo', canopyType: 'Running',
       dockPlatformType: 'Inward', flooringType: 'VDF', setbackArea: '5m on all sides', nearest_transport: 'Legacy bus station',

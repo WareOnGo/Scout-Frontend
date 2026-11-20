@@ -4,7 +4,7 @@ export const MEASUREMENTS = {
   approachRoadWidth: { label: 'Approach Road Width', units: LENGTH, bareUnit: 'feet', step: 1 },
   land_parcel_size: { label: 'Land Parcel Size', units: ['acres', 'hectares', 'sq ft'], legacyUnits: ['sq m'] },
   builtup_area: { label: 'Built-up Area', units: ['sq ft'], legacyUnits: ['sq m'] },
-  carpet_area: { label: 'Carpet Area', units: ['sq ft'], legacyUnits: ['sq m'] },
+  carpet_area: { label: 'Carpet Area', units: ['sq ft'], legacyUnits: ['sq m'], zero: true },
   dimensions: { label: 'Dimensions', units: LENGTH, parts: ['Length', 'Width', 'Height'] },
   clearHeightFt: { label: 'Clear Height', units: LENGTH, bareUnit: 'feet', hint: 'Side height of the warehouse.' },
   centreHeight: { label: 'Centre Height', units: LENGTH },

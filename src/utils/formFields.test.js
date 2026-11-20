@@ -44,6 +44,21 @@ describe('measurement contract', () => {
     expect(measurementError({ ...measurementState('', 'dimensions'), parts: ['20', '', '10'], edited: true }, 'dimensions')).toMatch(/every dimension/);
     expect(measurementError({ ...measurementState('', 'clearHeightFt'), parts: ['0'], edited: true }, 'clearHeightFt')).toBeTruthy();
   });
+  it.each(['plinthHeightFt', 'carpet_area'])('preserves zero for %s through drafts and saved values', key => {
+    for (const unit of MEASUREMENTS[key].units) {
+      for (const number of ['0', '0.0', '.0']) {
+        const state = { ...measurementState('', key), parts: [number], unit, edited: true };
+        const draft = hydrateMeasurements(JSON.parse(JSON.stringify({ [key]: state })));
+        expect(measurementError(draft[key], key)).toBeNull();
+        expect(serializeMeasurements(draft)[key]).toBe(`0 ${unit}`);
+        const reopened = measurementState(`0 ${unit}`, key);
+        expect(reopened.parts).toEqual(['0']);
+        expect(serializeMeasurement(reopened, key)).toBe(`0 ${unit}`);
+        expect(measurementError({ ...state, parts: ['-1'] }, key)).toBeTruthy();
+        expect(serializeMeasurement({ ...state, parts: [''] }, key)).toBeNull();
+      }
+    }
+  });
   it('retains structured drafts and unrelated media and setback values', () => {
     const old = { clearHeightFt: '20-30 ft', setbackArea: '5m on all sides', media: { images: ['photo'] }, _voiceDraftId: 'voice' };
     const hydrated = hydrateMeasurements(old);

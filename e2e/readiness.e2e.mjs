@@ -607,7 +607,7 @@ for (const width of [320, 390, 1280]) {
         ['powerKva', 'Power', 'HP'],
       ];
       for (const [key, label, unit] of measurements) {
-        await field(page, key).fill('50.5');
+        await field(page, key).fill(['plinthHeightFt', 'carpet_area'].includes(key) ? '0' : '50.5');
         if (['builtup_area', 'carpet_area'].includes(key)) {
           await expect(field(page, key).locator('..').locator('..').locator('.measurement-suffix')).toHaveText('sq ft');
         } else await page.getByLabel(`${label} unit`, { exact: true }).selectOption(unit);
@@ -645,6 +645,8 @@ for (const width of [320, 390, 1280]) {
       await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key))?.values?.washroom_count?.female, draftKey)).toBe('3');
       await page.reload();
       await expect(field(page, 'clearHeightFt')).toHaveValue('50.5');
+      await expect(field(page, 'plinthHeightFt')).toHaveValue('0');
+      await expect(field(page, 'carpet_area')).toHaveValue('0');
       await expect(page.getByLabel('Clear Height unit', { exact: true })).toHaveValue('metres');
       await expect(powerOption).toBeChecked();
       await expect(field(page, 'powerKva')).toBeDisabled();
@@ -652,8 +654,8 @@ for (const width of [320, 390, 1280]) {
       const receipt = await submit(page);
       await verifyStored(request, receipt, {
         contactNumber: '+4532123456', alt_phone_number: '+442079460123',
-        land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq ft', carpet_area: '50.5 sq ft',
-        clearHeightFt: '50.5 metres', centreHeight: '50.5 feet', plinthHeightFt: '50.5 feet',
+        land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq ft', carpet_area: '0 sq ft',
+        clearHeightFt: '50.5 metres', centreHeight: '50.5 feet', plinthHeightFt: '0 feet',
         dockDimension: '8 x 10 feet', dockApronLengthFt: '50.5 metres', gateSizeFt: '50.5 feet',
         floorStrengthPerSqm: '5 tonnes/sq m', lightingDetails: '200 lux', distance_from_highway: '0 km',
         washroom_count: 'Male: 0; Female: 3', canopyType: 'Running', dockPlatformType: 'Angled/Cross',
