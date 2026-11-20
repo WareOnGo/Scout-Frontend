@@ -5,8 +5,12 @@ export const PHONE_COUNTRIES = getCountries().map(country => ({
   country, code: getCountryCallingCode(country), name: names.of(country),
 })).sort((a, b) => a.country === 'IN' ? -1 : b.country === 'IN' ? 1 : a.name.localeCompare(b.name));
 
+// Copied numbers can contain invisible bidi/zero-width marks and nonbreaking
+// spaces. Remove formatting only; keep visible characters for validation.
+export const cleanPhoneText = raw => String(raw ?? '').replace(/\p{Cf}/gu, '').replace(/\s/g, ' ');
+
 export function parsePhone(raw, country = 'IN') {
-  const text = String(raw ?? '').trim();
+  const text = cleanPhoneText(raw).trim();
   if (!text || !/^\+?[\d\s().-]+$/.test(text)) return undefined;
   const input = text.startsWith('00') ? `+${text.slice(2)}` : text;
   try {
@@ -31,7 +35,7 @@ export function phoneState(value) {
 
 export function phoneError(value, { required = false, allowLegacy = false } = {}) {
   const state = phoneState(value);
-  if (!state.national.trim()) return required ? 'Contact number is required' : null;
+  if (!cleanPhoneText(state.national).trim()) return required ? 'Contact number is required' : null;
   if (allowLegacy && !state.edited) return null;
   return parsePhone(state.national, state.country)?.isPossible() ? null : 'Enter a valid phone number for the selected country.';
 }
@@ -39,7 +43,7 @@ export function phoneError(value, { required = false, allowLegacy = false } = {}
 export function serializePhone(value, preserveOriginal = false) {
   const state = phoneState(value);
   if (preserveOriginal && !state.edited) return state.raw || null;
-  if (!state.national.trim()) return null;
+  if (!cleanPhoneText(state.national).trim()) return null;
   const parsed = parsePhone(state.national, state.country);
   if (!parsed?.isPossible()) throw new Error('Enter a valid phone number for the selected country.');
   return parsed.number;

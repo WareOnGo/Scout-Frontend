@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
 import { MEASUREMENTS, measurementState, setPowerRequirement, washroomState, ventilationState, VENTILATION_TYPES, toggleVentilation } from '../utils/formFields';
-import { PHONE_COUNTRIES, phoneState, normalizePhoneInput } from '../utils/phone';
+import { PHONE_COUNTRIES, phoneState, normalizePhoneInput, cleanPhoneText } from '../utils/phone';
 import './StructuredFields.css';
 
 
@@ -87,10 +87,10 @@ export function PhoneField({ field, label, value, onChange, error, required }) {
       <label className="structured-part">
         <input className="form-input" type="tel" inputMode="tel" autoComplete="tel-national"
           aria-label={label} aria-invalid={Boolean(error)} data-field={field} value={state.national}
-          placeholder="Phone number" onChange={event => onChange({ ...state, national: event.target.value, edited: true })}
+          placeholder="Phone number" onChange={event => onChange({ ...state, national: cleanPhoneText(event.target.value), edited: true })}
           onBlur={() => { if (state.edited) onChange(normalizePhoneInput(state)); }}
           onPaste={event => {
-            const text = event.clipboardData.getData('text').trim();
+            const text = cleanPhoneText(event.clipboardData.getData('text')).trim();
             if (/^(\+|00)/.test(text)) {
               event.preventDefault();
               onChange(normalizePhoneInput({ ...state, national: text, edited: true }));

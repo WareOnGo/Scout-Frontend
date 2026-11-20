@@ -27,6 +27,27 @@ async function submit(onSubmit) {
 }
 
 describe('Scout structured form', () => {
+  it('cleans pasted phone formatting and submits both numbers after restoring the draft', async () => {
+    const user = userEvent.setup();
+    draft({ contactNumber: '', alt_phone_number: '' }, 0);
+    const onSubmit = vi.fn().mockResolvedValue({});
+    const view = render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    await user.click(field('contactNumber'));
+    await user.paste('\u200e99800\u200b88303\u200f');
+    expect(field('contactNumber')).toHaveValue('9980088303');
+    await user.click(field('alt_phone_number'));
+    await user.paste('\u2066+44\u00a020\u202f7946\u202f0123\u2069');
+    expect(screen.getByLabelText('Alternate Phone Number country code')).toHaveValue('GB');
+    expect(field('alt_phone_number')).toHaveValue('2079460123');
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values.alt_phone_number.national).toBe('2079460123'));
+    view.unmount();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(field('contactNumber')).toHaveValue('9980088303');
+    expect(field('alt_phone_number')).toHaveValue('2079460123');
+    const payload = await submit(onSubmit);
+    expect(payload).toMatchObject({ contactNumber: '+919980088303', alt_phone_number: '+442079460123' });
+  });
+
   it('shows character feedback before navigation only for the new measurement inputs', async () => {
     draft();
     await act(async () => { render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />); });
