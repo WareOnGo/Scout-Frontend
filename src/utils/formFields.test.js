@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest';
 import { MEASUREMENTS, measurementState, measurementError, serializeMeasurement, hydrateMeasurements,
   serializeMeasurements, washroomState, washroomError, serializeWashrooms, ventilationState, toggleVentilation, serializeVentilation, setPowerRequirement } from './formFields';
 import { phoneState, phoneError, serializePhone, normalizePhoneInput, PHONE_COUNTRIES } from './phone';
+import { setMeasurementTextOption } from './formFields';
+
+describe('floor load to be confirmed', () => {
+  const field = 'floorStrengthPerSqm';
+  it('saves the text option through a persisted draft and restores the entered number when unticked', () => {
+    const entered = { ...measurementState('', field), parts: ['5.50'], edited: true };
+    const selected = setMeasurementTextOption(entered, field, true);
+    const restoredDraft = measurementState(JSON.parse(JSON.stringify(selected)), field);
+    expect(serializeMeasurement(restoredDraft, field)).toBe('To be confirmed');
+    expect(serializeMeasurement(setMeasurementTextOption(restoredDraft, field, false), field)).toBe('5.5 tonnes/sq m');
+  });
+  it.each(['To be confirmed', ' to  BE confirmed '])('reopens %s checked and requires a replacement after unticking', text => {
+    const state = measurementState(text, field);
+    expect(state).toMatchObject({ toBeConfirmed: true, legacy: false });
+    expect(serializeMeasurement(state, field)).toBe(text);
+    const unticked = setMeasurementTextOption(state, field, false);
+    expect(serializeMeasurement(unticked, field)).toBeNull();
+    expect(serializeMeasurement({ ...unticked, parts: ['7'] }, field)).toBe('7 tonnes/sq m');
+  });
+  it('recognizes an older draft that treated the saved text as a legacy measurement', () => {
+    const draft = { ...measurementState('', field), raw: 'To be confirmed', legacy: true };
+    expect(measurementState(draft, field)).toMatchObject({ toBeConfirmed: true, legacy: false });
+  });
+  it('restores validation for an invalid numeric draft after the option is unticked', () => {
+    const invalid = { ...measurementState('', field), parts: ['0'], edited: true };
+    const selected = setMeasurementTextOption(invalid, field, true);
+    expect(measurementError(selected, field)).toBeNull();
+    expect(serializeMeasurement(selected, field)).toBe('To be confirmed');
+    expect(measurementError(setMeasurementTextOption(selected, field, false), field)).toBeTruthy();
+  });
+});
 
 describe('measurement contract', () => {
   it.each(Object.entries(MEASUREMENTS))('%s sends only a combined string', (key, config) => {

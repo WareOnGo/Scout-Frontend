@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef } from 'react';
-import { MEASUREMENTS, measurementState, setPowerRequirement, washroomState, ventilationState, VENTILATION_TYPES, toggleVentilation } from '../utils/formFields';
+import { MEASUREMENTS, measurementState, setMeasurementTextOption, washroomState, ventilationState, VENTILATION_TYPES, toggleVentilation } from '../utils/formFields';
 import { PHONE_COUNTRIES, phoneState, normalizePhoneInput, cleanPhoneText } from '../utils/phone';
 import './StructuredFields.css';
 
@@ -28,23 +28,23 @@ export function MeasurementField({ field, value, onChange, error, required }) {
   const descriptionId = useId();
   const config = MEASUREMENTS[field];
   const state = measurementState(value, field);
-  const asPerRequirement = field === 'powerKva' && state.asPerRequirement === true;
+  const textOptionSelected = !!config.textOption && state[config.textOption.flag] === true;
   const labels = config.parts || ['Value'];
   // Allow unfinished decimals while typing; complete-value checks still run on save.
-  const invalidParts = state.parts.map(part => !asPerRequirement && state.edited && !/^\d*\.?\d*$/.test(part.trim()));
+  const invalidParts = state.parts.map(part => !textOptionSelected && state.edited && !/^\d*\.?\d*$/.test(part.trim()));
   const inputError = invalidParts.some(Boolean)
     ? 'Use digits and at most one decimal point (e.g. 50.5).' : null;
-  const displayedError = asPerRequirement ? null : inputError || error;
+  const displayedError = textOptionSelected ? null : inputError || error;
   const update = patch => onChange({ ...state, ...patch, edited: true, legacy: false });
   return <FieldGroup label={config.label} required={required} error={displayedError} hint={config.hint} descriptionId={descriptionId}>
-    {state.legacy && !asPerRequirement ? <ExistingValue value={state.edited ? `${state.parts.join(' x ')} ${state.unit}`.trim() : state.raw} field={field}
+    {state.legacy && !textOptionSelected ? <ExistingValue value={state.edited ? `${state.parts.join(' x ')} ${state.unit}`.trim() : state.raw} field={field}
       onReplace={() => update({ parts: labels.map(() => ''), unit: config.units[0] })} /> : (
       <div className={`measurement-inputs${config.parts ? ' measurement-inputs--dimensions' : ''}`} data-parts={config.parts?.length}>
         {labels.map((label, index) => <label key={label} className="structured-part">
           {config.parts && <span>{label}</span>}
           <input className="form-input" type="text" inputMode="decimal" autoComplete="off"
-            aria-label={`${config.label} ${label.toLowerCase()}`} aria-required={required || undefined} aria-invalid={!asPerRequirement && (invalidParts[index] || Boolean(error))}
-            disabled={asPerRequirement}
+            aria-label={`${config.label} ${label.toLowerCase()}`} aria-required={required || undefined} aria-invalid={!textOptionSelected && (invalidParts[index] || Boolean(error))}
+            disabled={textOptionSelected}
             aria-describedby={displayedError || config.hint ? descriptionId : undefined}
             data-field={index === 0 ? field : `${field}-${index}`} value={state.parts[index]}
             placeholder={config.parts ? label : 'Enter number'}
@@ -53,7 +53,7 @@ export function MeasurementField({ field, value, onChange, error, required }) {
         <label className="structured-part structured-unit">
           {config.parts && <span>Unit</span>}
           {config.units.length === 1 && state.unit === config.units[0] ? <span className="measurement-suffix">{config.units[0]}</span>
-            : <select className="form-input" aria-label={`${config.label} unit`} value={state.unit} disabled={asPerRequirement}
+            : <select className="form-input" aria-label={`${config.label} unit`} value={state.unit} disabled={textOptionSelected}
               onChange={event => update({ unit: event.target.value })}>
               <option value="" disabled>Select unit</option>
               {config.units.map(unit => <option key={unit} value={unit}>{unit}</option>)}
@@ -61,10 +61,10 @@ export function MeasurementField({ field, value, onChange, error, required }) {
         </label>
       </div>
     )}
-    {field === 'powerKva' && <label className="power-requirement">
-      <input type="checkbox" checked={asPerRequirement}
-        onChange={event => onChange(setPowerRequirement(state, event.target.checked))} />
-      <span>As per requirement</span>
+    {config.textOption && <label className={`measurement-option${field === 'powerKva' ? ' power-requirement' : ''}`}>
+      <input type="checkbox" checked={textOptionSelected}
+        onChange={event => onChange(setMeasurementTextOption(state, field, event.target.checked))} />
+      <span>{config.textOption.label}</span>
     </label>}
     {state.edited && state.raw && <button type="button" className="structured-restore"
       onClick={() => onChange(measurementState(state.raw, field))}>Keep original value</button>}

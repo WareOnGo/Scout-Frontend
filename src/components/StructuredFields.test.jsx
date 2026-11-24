@@ -15,6 +15,38 @@ function Measurement({ field = 'clearHeightFt', initial = '' }) {
   return <MeasurementField field={field} value={value} onChange={setValue} />;
 }
 
+describe('floor load to be confirmed', () => {
+  it('supports keyboard toggling and restores the entered capacity', async () => {
+    const user = userEvent.setup();
+    render(<Measurement field="floorStrengthPerSqm" initial="5.5 tonnes/sq m" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'To be confirmed' });
+    checkbox.focus();
+    await user.keyboard(' ');
+    expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText('Floor Strength value')).toBeDisabled();
+    await user.keyboard(' ');
+    expect(screen.getByLabelText('Floor Strength value')).toBeEnabled();
+    expect(screen.getByLabelText('Floor Strength value')).toHaveValue('5.5');
+  });
+  it('reopens a saved confirmation checked and supports restoring the original answer', () => {
+    render(<Measurement field="floorStrengthPerSqm" initial="To be confirmed" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'To be confirmed' });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    expect(screen.getByLabelText('Floor Strength value')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep original value' }));
+    expect(checkbox).toBeChecked();
+  });
+  it('stays disabled inside a protected form section', async () => {
+    const user = userEvent.setup();
+    render(<fieldset disabled><Measurement field="floorStrengthPerSqm" initial="5 tonnes/sq m" /></fieldset>);
+    const checkbox = screen.getByRole('checkbox', { name: 'To be confirmed' });
+    expect(checkbox).toBeDisabled();
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+  });
+});
+
 describe('power as per requirement', () => {
   it('supports keyboard toggling and restores the entered magnitude and unit', async () => {
     const user = userEvent.setup();

@@ -111,6 +111,22 @@ describe('Scout structured form', () => {
     expect(JSON.stringify(payload)).not.toContain('asPerRequirement');
   }, 15000);
 
+  it('restores an unconfirmed floor-load draft and submits it through the existing field', async () => {
+    draft({ floorStrengthPerSqm: '5 tonnes/sq m' });
+    const onSubmit = vi.fn().mockResolvedValue({});
+    const view = render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('To be confirmed'));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(key)).values.floorStrengthPerSqm.toBeConfirmed).toBe(true));
+    view.unmount();
+    render(<WarehouseForm visible onSubmit={onSubmit} onCancel={vi.fn()} />);
+    expect(screen.getByLabelText('To be confirmed')).toBeChecked();
+    expect(field('floorStrengthPerSqm')).toBeDisabled();
+    expect(field('floorStrengthPerSqm')).toHaveValue('5');
+    const payload = await submit(onSubmit);
+    expect(payload.floorStrengthPerSqm).toBe('To be confirmed');
+    expect(JSON.stringify(payload)).not.toContain('toBeConfirmed');
+  });
+
   it('blocks new submissions missing land/location and invalid partial dimensions', async () => {
     draft({ landType: '', googleLocation: '' }, 1);
     render(<WarehouseForm visible onSubmit={vi.fn()} onCancel={vi.fn()} />);

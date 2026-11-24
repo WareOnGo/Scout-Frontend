@@ -630,6 +630,10 @@ for (const width of [320, 390, 1280]) {
       await field(page, 'dockDimension').fill('8');
       await field(page, 'dockDimension-1').fill('10');
       await field(page, 'floorStrengthPerSqm').fill('5');
+      const floorOption = page.getByRole('checkbox', { name: 'To be confirmed', exact: true });
+      await floorOption.check();
+      await expect(field(page, 'floorStrengthPerSqm')).toBeDisabled();
+      expect((await floorOption.locator('..').boundingBox()).height).toBeGreaterThanOrEqual(44);
       await field(page, 'lightingDetails').fill('200');
       await page.getByLabel('Male washrooms', { exact: true }).fill('0');
       await page.getByLabel('Female washrooms', { exact: true }).fill('3');
@@ -651,13 +655,18 @@ for (const width of [320, 390, 1280]) {
       await expect(powerOption).toBeChecked();
       await expect(field(page, 'powerKva')).toBeDisabled();
       await expect(field(page, 'powerKva')).toHaveValue('50.5');
+      await expect(floorOption).toBeChecked();
+      await expect(field(page, 'floorStrengthPerSqm')).toBeDisabled();
+      await floorOption.uncheck();
+      await expect(field(page, 'floorStrengthPerSqm')).toHaveValue('5');
+      await floorOption.check();
       const receipt = await submit(page);
       await verifyStored(request, receipt, {
         contactNumber: '+4532123456', alt_phone_number: '+442079460123',
         land_parcel_size: '50.5 hectares', builtup_area: '50.5 sq ft', carpet_area: '0 sq ft',
         clearHeightFt: '50.5 metres', centreHeight: '50.5 feet', plinthHeightFt: '0 feet',
         dockDimension: '8 x 10 feet', dockApronLengthFt: '50.5 metres', gateSizeFt: '50.5 feet',
-        floorStrengthPerSqm: '5 tonnes/sq m', lightingDetails: '200 lux', distance_from_highway: '0 km',
+        floorStrengthPerSqm: 'To be confirmed', lightingDetails: '200 lux', distance_from_highway: '0 km',
         washroom_count: 'Male: 0; Female: 3', canopyType: 'Running', dockPlatformType: 'Angled/Cross',
         flooringType: 'VDF', ventilationType: 'Ridge, Turbo',
       });
